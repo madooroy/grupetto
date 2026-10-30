@@ -9,6 +9,22 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+// Short git commit (plus "-dirty" for uncommitted changes) so a debug build on the
+// tablet shows exactly which code it was built from, e.g. "v0.0.44-59a84e7".
+def gitRun = { List<String> args ->
+    try {
+        return providers.exec {
+            commandLine(['git'] + args)
+            ignoreExitValue = true
+        }.standardOutput.asText.get().trim()
+    } catch (Exception ignored) {
+        return ""
+    }
+}
+def gitCommit = gitRun(['rev-parse', '--short', 'HEAD'])
+def gitDirty = gitRun(['status', '--porcelain', '--untracked-files=no'])
+def gitVersionSuffix = gitCommit ? "-${gitCommit}${gitDirty ? '-dirty' : ''}" : ""
+
 android {
     namespace 'com.spop.poverlay'
     compileSdk 34
@@ -52,6 +68,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            versionNameSuffix gitVersionSuffix
+        }
         release {
             // R8 shrinks and optimizes the release build; Compose runs noticeably faster
             // optimized on the original Bike's MT8173. Obfuscation is off (see proguard-rules.pro).
