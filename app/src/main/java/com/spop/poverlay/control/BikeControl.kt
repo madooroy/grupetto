@@ -150,6 +150,17 @@ class BikeControl(
             gain = if (gain.isFinite()) gain.coerceIn(.001f, .03f) else .007f)
     }
 
+    /**
+     * Step the ramp speed to the next preset (see [nextRampRate]) without touching the other tuning.
+     * Takes effect on the next ramp tick, so it can be changed mid-ride from the overlay.
+     */
+    @Synchronized fun cycleRampRate(): Int {
+        val next = nextRampRate(state.value.rampRate)
+        tune(state.value.shiftSize, state.value.gain, rampRate = next)
+        trace?.invoke("tune rampRate=$next/s source=overlay")
+        return next
+    }
+
     @Synchronized fun acceptSample(value: BikeSample?) {
         if (!supported) return
         if (value == null || !value.power.isFinite() || value.power < 0 ||
@@ -622,6 +633,10 @@ class BikeControl(
         const val RAMP_RATE_DEFAULT = 10
         const val RAMP_RATE_MIN = 3
         const val RAMP_RATE_MAX = 20
+        // Ramp speeds the overlay's ramp chip steps through on each tap, slowest first.
+        val RAMP_RATE_PRESETS = intArrayOf(10, 12, 15, 20)
+        /** The next preset above [current], wrapping to the slowest; a slider value between presets goes up to the next one. */
+        fun nextRampRate(current: Int): Int = RAMP_RATE_PRESETS.firstOrNull { it > current } ?: RAMP_RATE_PRESETS.first()
         const val RAMP_TICK_MS = 100L
         const val RAMP_ECHO_LAG_LEVELS = 5
         // ERG holds within half a resistance level's watts, never less than 3 W.

@@ -91,6 +91,16 @@ class OverlaySensorViewModel(
     val bikeControlState = sensorInterface.bikeControl?.state
         ?: MutableStateFlow(com.spop.poverlay.control.ControlState())
     fun shift(direction: Int) { sensorInterface.bikeControl?.shift(direction) }
+    // Ramp speed chip on the overlay bar: shown only while ERG is running, one tap steps to the next preset.
+    val rampRateLabel: Flow<String?> = bikeControlState.map {
+        if (it.connected && it.mode == com.spop.poverlay.control.ControlMode.Erg) "Ramp ${it.rampRate}/s" else null
+    }
+    fun cycleRampRate() {
+        val control = sensorInterface.bikeControl ?: return
+        val next = control.cycleRampRate()
+        application.getSharedPreferences(com.spop.poverlay.ConfigurationRepository.SharedPrefsName, android.content.Context.MODE_PRIVATE)
+            .edit().putInt("bikeRampRate", next).apply()
+    }
 
     companion object {
         // The sensor does not necessarily return new value this quickly

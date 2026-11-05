@@ -418,6 +418,36 @@ class BikeControlTest {
         control.tune(2, .007f, rampRate = 12); control.tune(3, .01f)
         assertEquals(12, control.state.value.rampRate)
     }
+    @Test fun overlayRampChipStepsThroughPresetsAndWraps() {
+        assertEquals(12, BikeControl.nextRampRate(10))
+        assertEquals(15, BikeControl.nextRampRate(12))
+        assertEquals(20, BikeControl.nextRampRate(15))
+        assertEquals(10, BikeControl.nextRampRate(20))
+        // A slider value between presets goes up to the next preset; one below all of them to the slowest.
+        assertEquals(15, BikeControl.nextRampRate(13))
+        assertEquals(10, BikeControl.nextRampRate(3))
+        control.tune(4, .01f, 15, 1f, rampRate = 12)
+        assertEquals(15, control.cycleRampRate())
+        val s = control.state.value
+        assertEquals(15, s.rampRate)
+        // Only the ramp speed changes.
+        assertEquals(listOf(4, 15), listOf(s.shiftSize, s.wattsPerShift))
+        assertEquals(.01f, s.gain, 0f); assertEquals(1f, s.inclineSensitivity, 0f)
+    }
+    @Test fun rampSpeedChangedMidRampAppliesOnTheNextTick() {
+        resistance = 44
+        pedal()
+        assertTrue(control.localErg(260))
+        sample(168f, 90f)
+        now += 100; control.tick()
+        val before = writes.size
+        // 10 -> 12 -> 15 -> 20: now two levels per 100 ms tick.
+        repeat(3) { control.cycleRampRate() }
+        assertEquals(20, control.state.value.rampRate)
+        val last = writes.last()
+        now += 100; control.tick()
+        assertTrue("expected a 2-level step at 20/s after $before writes, got $writes", writes.last() - last == 2)
+    }
     @Test fun slowerRampMovesHalfALevelPerTick() {
         resistance = 44
         control.tune(2, .007f, rampRate = 5)
