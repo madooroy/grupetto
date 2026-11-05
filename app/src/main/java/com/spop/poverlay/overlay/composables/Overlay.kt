@@ -83,6 +83,7 @@ fun Overlay(
     }
     val powerComparison = remember(displayedPower) { displayedPower.comparison }
     val powerSource = displayedPower.source.label
+    val rampLabel by sensorViewModel.rampRateLabel.collectAsState(initial = null)
 
     val defaultMetric by sensorViewModel.defaultMetric.collectAsState()
     val selectedMetric by sensorViewModel.selectedMetric.collectAsState(initial = defaultMetric)
@@ -234,7 +235,9 @@ fun Overlay(
             onOpenSettings = { sensorViewModel.onOverlayDoubleTap() },
             onMinimizeToggle = { sensorViewModel.onOverlayPressed() },
             onLayout = onTimerLayout,
-            emulationLabel = sensorViewModel.emulatedModel
+            emulationLabel = sensorViewModel.emulatedModel,
+            rampLabel = rampLabel,
+            onRampTap = { sensorViewModel.cycleRampRate() }
         )
     }
     // Once the minimize slide has finished, the main content is fully off screen. Composing it

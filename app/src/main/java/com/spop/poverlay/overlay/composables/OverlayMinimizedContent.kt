@@ -61,7 +61,9 @@ fun OverlayMinimizedContent(
     onLayout: (IntSize) -> Unit,
     emulationLabel: String? = null,
     powerComparison: String? = null,
-    powerSourceLabel: String? = null
+    powerSourceLabel: String? = null,
+    rampLabel: String? = null,
+    onRampTap: () -> Unit = {}
 ) {
     val backgroundShape = if (isMinimized) {
         RoundedCornerShape(8.dp)
@@ -135,6 +137,19 @@ fun OverlayMinimizedContent(
             )
         }
 
+        if (rampLabel != null) {
+            // Tap to step the ERG ramp speed mid-ride (opening settings would leave the ride).
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                rampLabel,
+                color = Color(0xFF6EE7B7),
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .background(Color(0x5552728F), RoundedCornerShape(6.dp))
+                    .clickable { onRampTap() }
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
         Spacer(modifier = Modifier.width(6.dp))
         Icon(
             imageVector = Icons.Filled.Settings,
