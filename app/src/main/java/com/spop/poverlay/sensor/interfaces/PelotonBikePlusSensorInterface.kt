@@ -44,6 +44,23 @@ class PelotonBikePlusSensorInterface(val context: Context, controlSupported: Boo
         }
     }
 
+    // Experimental flywheel temperature estimate (doudar's disc/hub model), fed from the bike's reported watts so it
+    // also runs on the Bike+ and CrossTrainer, which have no calibration screen. Debug builds log it once a second.
+    private val flywheelTemperature =
+        (context.applicationContext as? com.spop.poverlay.GrupettoApplication)?.grupettoCalibration?.flywheelTemperature
+    private var flywheelTracedAt = Long.MIN_VALUE
+    private fun observeFlywheel(sample: com.spop.poverlay.control.BikeSample?) {
+        val tracker = flywheelTemperature ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        tracker.observeNativeWatts(now, sample?.power?.toDouble() ?: Double.NaN)
+        if (com.spop.poverlay.BuildConfig.DEBUG && now - flywheelTracedAt >= 1000) {
+            flywheelTracedAt = now
+            val state = tracker.state.value
+            timber.log.Timber.tag("ErgTrace").d("thermal disc=%.1fF hub=%.1fF room=%.1fF watts=%s level=%s",
+                state.fahrenheit, state.hubCelsius * 1.8 + 32, state.roomFahrenheit, sample?.power, sample?.resistance)
+        }
+    }
+
     fun stop() {
         bikeControl.stop()
         job.cancel()
@@ -53,7 +70,10 @@ class PelotonBikePlusSensorInterface(val context: Context, controlSupported: Boo
         try {
             val binding = getV2Binder(context)
             try {
-                val sensor = BikePlusCombinedSensor(binding.binder, bikeControl::acceptSample)
+                val sensor = BikePlusCombinedSensor(binding.binder) { sample ->
+                    bikeControl.acceptSample(sample)
+                    observeFlywheel(sample)
+                }
                 activeSensor = sensor
                 try {
                     sensor.start()

@@ -24,7 +24,9 @@ internal fun TrainerControls(
     onSimulation: (Float) -> Unit,
     onManual: () -> Unit,
     onResistance: (Int) -> Unit,
-    onTuning: (Int, Float, Int, Float, Int) -> Unit
+    onTuning: (Int, Float, Int, Float, Int) -> Unit,
+    roomFahrenheit: Double? = null,
+    onRoomTemperature: ((Double) -> Unit)? = null
 ) {
     val mode = if (state.mode == ControlMode.Resistance) ControlMode.Manual else state.mode
     Column {
@@ -75,6 +77,11 @@ internal fun TrainerControls(
             BikeControl.RAMP_RATE_MIN.toFloat()..BikeControl.RAMP_RATE_MAX.toFloat(),
             BikeControl.RAMP_RATE_MAX - BikeControl.RAMP_RATE_MIN - 1) {
             onTuning(state.shiftSize, state.gain, state.wattsPerShift, state.inclineSensitivity, it.roundToInt())
+        }
+        // Room temperature for the experimental flywheel temperature estimate shown on the overlay.
+        if (roomFahrenheit != null && onRoomTemperature != null) {
+            TrainerSlider("Room temperature", "${roomFahrenheit.roundToInt()} °F", roomFahrenheit.toFloat().coerceIn(50f, 95f),
+                50f..95f, 44) { onRoomTemperature(it.roundToInt().toDouble()) }
         }
         Text("${state.message} · Pedal to apply resistance", fontSize = 12.sp, lineHeight = 16.sp, color = Color(0xFFB7F7DF))
         Text("Connected training apps automatically set the mode and target.", fontSize = 12.sp, lineHeight = 16.sp, color = Color(0xFF9EAEC0))

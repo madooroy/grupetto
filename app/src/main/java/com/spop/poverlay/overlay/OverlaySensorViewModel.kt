@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.shareIn
@@ -94,6 +95,14 @@ class OverlaySensorViewModel(
     // Ramp speed chip on the overlay bar: shown only while ERG is running, one tap steps to the next preset.
     val rampRateLabel: Flow<String?> = bikeControlState.map {
         if (it.connected && it.mode == com.spop.poverlay.control.ControlMode.Erg) "Ramp ${it.rampRate}/s" else null
+    }
+    // Experimental flywheel (brake disc) temperature estimate, shown on the overlay bar while the bike reports power.
+    val flywheelLabel: Flow<String?> = ((application as? com.spop.poverlay.GrupettoApplication)?.grupettoCalibration
+        ?.flywheelTemperature?.state ?: kotlinx.coroutines.flow.flowOf(null)).map { state ->
+        state?.takeIf { it.receivingPower }?.let {
+            val unit = it.displayUnit
+            "Disc ${unit.fromFahrenheit(it.fahrenheit).roundToInt()}${unit.symbol}"
+        }
     }
     fun cycleRampRate() {
         val control = sensorInterface.bikeControl ?: return

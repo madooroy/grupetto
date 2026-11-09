@@ -324,7 +324,8 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
             GrupettoTabs(tab, listOf("Trainer", "Shifters"), { tab = it })
             Spacer(Modifier.height(8.dp))
             if (tab == 0) TrainerControls(bike, viewModel::startErg, viewModel::startSimulation,
-                viewModel::stopBikeControl, viewModel::setBikeResistance, viewModel::setBikeTuning)
+                viewModel::stopBikeControl, viewModel::setBikeResistance, viewModel::setBikeTuning,
+                flywheelTemperature.roomFahrenheit, viewModel::setRoomTemperature)
             else ShifterSettings(showShifters, shifterInset, viewModel::setShowShifters, viewModel::setShifterInset,
                 onPreview = { previewShifters = it })
         }
