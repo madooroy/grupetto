@@ -40,6 +40,12 @@ class FlywheelTemperatureTracker(context: Context,
         }
     }
 
+    /** Bike+/CrossTrainer: the bike's own reported watts, without a calibration frame. Same model as observe(frame). */
+    fun observeNativeWatts(nowMillis: Long, watts: Double) = synchronized(lock) {
+        model.observe(nowMillis, watts)
+        mutableState.value = model.state
+    }
+
     fun observe(frame: CalibrationFrame) = synchronized(lock) {
         model.observe(frame.timestamp, if (frame.powerSource == 1) frame.nativeWatts else Double.NaN)
         if (model.latestObservationAt == frame.timestamp && model.state.receivingPower && frame.powerSource == 1 && frame.nativeWatts.isFinite() &&

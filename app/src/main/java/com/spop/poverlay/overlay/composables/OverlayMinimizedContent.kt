@@ -63,6 +63,7 @@ fun OverlayMinimizedContent(
     powerComparison: String? = null,
     powerSourceLabel: String? = null,
     rampLabel: String? = null,
+    flywheelLabel: String? = null,
     onRampTap: () -> Unit = {}
 ) {
     val backgroundShape = if (isMinimized) {
@@ -147,6 +148,18 @@ fun OverlayMinimizedContent(
                 modifier = Modifier
                     .background(Color(0x5552728F), RoundedCornerShape(6.dp))
                     .clickable { onRampTap() }
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+        if (flywheelLabel != null) {
+            // Experimental flywheel temperature estimate (read-only).
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                flywheelLabel,
+                color = Color(0xFFFFC078),
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .background(Color(0x40845A2B), RoundedCornerShape(6.dp))
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
