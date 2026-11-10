@@ -94,8 +94,14 @@ class OverlaySensorViewModel(
     fun shift(direction: Int) { sensorInterface.bikeControl?.shift(direction) }
     // Ramp speed chip on the overlay bar: shown only while ERG is running, one tap steps to the next preset.
     val rampRateLabel: Flow<String?> = bikeControlState.map {
-        if (it.connected && it.mode == com.spop.poverlay.control.ControlMode.Erg) "Ramp ${it.rampRate}/s" else null
+        if (it.connected && it.mode == com.spop.poverlay.control.ControlMode.Erg) when (it.rampTest) {
+            com.spop.poverlay.control.RampTest.OFF -> "Ramp ${it.rampRate}/s"
+            com.spop.poverlay.control.RampTest.GUARD_SCALED -> "Ramp ${it.rampRate}/s G"
+            com.spop.poverlay.control.RampTest.BLIND -> "Ramp ?"
+        } else null
     }
+    /** Debug builds only (long-press on the ramp chip); not saved, so every app start is back to OFF. */
+    fun cycleRampTest() { sensorInterface.bikeControl?.cycleRampTest() }
     // Experimental flywheel (brake disc) temperature estimate, shown on the overlay bar while the bike reports power.
     val flywheelLabel: Flow<String?> = ((application as? com.spop.poverlay.GrupettoApplication)?.grupettoCalibration
         ?.flywheelTemperature?.state ?: kotlinx.coroutines.flow.flowOf(null)).map { state ->
