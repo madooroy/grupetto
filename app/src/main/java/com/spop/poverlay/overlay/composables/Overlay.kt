@@ -239,7 +239,8 @@ fun Overlay(
             emulationLabel = sensorViewModel.emulatedModel,
             rampLabel = rampLabel,
             flywheelLabel = flywheelLabel,
-            onRampTap = { sensorViewModel.cycleRampRate() }
+            onRampTap = { sensorViewModel.cycleRampRate() },
+            onRampLongPress = if (com.spop.poverlay.BuildConfig.DEBUG) { { sensorViewModel.cycleRampTest() } } else null
         )
     }
     // Once the minimize slide has finished, the main content is fully off screen. Composing it

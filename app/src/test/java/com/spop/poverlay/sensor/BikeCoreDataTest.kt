@@ -18,7 +18,8 @@ class BikeCoreDataTest {
 
         val result = readBikeCoreData(parcel)
 
-        assertEquals(BikeCoreData(rpm = 123L, power = 456L, currentResistance = 12, targetResistance = 34), result)
+        assertEquals(BikeCoreData(rpm = 123L, power = 456L, currentResistance = 12, targetResistance = 34,
+            stepperMotorPosition = 789L), result)
         verifySequence {
             parcel.readLong()
             parcel.readLong()

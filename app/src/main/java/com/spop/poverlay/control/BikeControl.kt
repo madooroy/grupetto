@@ -30,6 +30,8 @@ data class ControlState(
     val gain: Float = .007f,
     /** Modeled-jump ramp speed in resistance levels per second (rider preference). */
     val rampRate: Int = BikeControl.RAMP_RATE_DEFAULT,
+    /** Debug ramp experiment (tablet test builds only); OFF is the normal behaviour. */
+    val rampTest: RampTest = RampTest.OFF,
     val permissionLostCount: Int = 0,
     val message: String = "Waiting for Bike+"
 )
@@ -44,12 +46,24 @@ data class Simulation(val wind: Float, val grade: Float, val rolling: Float, val
     }
 }
 
+/**
+ * Debug-only ramp experiment, cycled by long-pressing the overlay ramp chip in debug builds.
+ * OFF: normal ramp (echo guard RAMP_ECHO_LAG_LEVELS = 5).
+ * GUARD_SCALED: the guard allows the echo to trail by ~0.9 s of ramp ([BikeControl.rampGuardFor]),
+ *   so a normal echo lag no longer stalls the ramp (Nov 5 log: 300-500 ms stalls on every jump).
+ * BLIND: each up-jump randomly (balanced in pairs) gets arm A = guard 5 at 12/s or arm B = scaled guard
+ *   at 10/s (about the same average speed, ~10 levels/s); the chip hides which. Logged as "ramp arm=".
+ */
+enum class RampTest { OFF, GUARD_SCALED, BLIND }
+
 /** Serialized, clock-injected control core. No Android stubs or sleeping threads in tests.
  * Motor transaction and proportional ERG approach inspired by dwj300's PR #50.
  */
 class BikeControl(
     val supported: Boolean,
     private val clock: () -> Long,
+    // Only the BLIND ramp experiment draws from it; before writeResistance so callers keep the trailing lambda.
+    private val random: kotlin.random.Random = kotlin.random.Random.Default,
     private val writeResistance: (Int) -> Boolean
 ) {
     private val mutableState = MutableStateFlow(ControlState())
@@ -87,6 +101,10 @@ class BikeControl(
     private var againstSamples = 0
     private var againstSampleTime = Long.MIN_VALUE
     private var rampTime = 0L
+    // Per-jump overrides set by the BLIND ramp experiment (null = use the live settings).
+    private var rampRateNow: Int? = null
+    private var rampGuardNow: Int? = null
+    private val blindArms = ArrayDeque<Char>()
     private var rampOffSince = 0L
     private var steadyResistance = -1
     private var steadySince = 0L
@@ -158,6 +176,15 @@ class BikeControl(
         val next = nextRampRate(state.value.rampRate)
         tune(state.value.shiftSize, state.value.gain, rampRate = next)
         trace?.invoke("tune rampRate=$next/s source=overlay")
+        return next
+    }
+
+    /** Debug builds: step the ramp experiment OFF -> GUARD_SCALED -> BLIND -> OFF (see [RampTest]). */
+    @Synchronized fun cycleRampTest(): RampTest {
+        val next = RampTest.values()[(state.value.rampTest.ordinal + 1) % RampTest.values().size]
+        mutableState.value = state.value.copy(rampTest = next)
+        blindArms.clear()
+        trace?.invoke("tune rampTest=$next source=overlay")
         return next
     }
 
@@ -393,6 +420,15 @@ class BikeControl(
                         againstSamples = 0
                         rampTime = clock() - RAMP_TICK_MS
                         rampOffSince = 0L
+                        rampRateNow = null
+                        rampGuardNow = null
+                        if (state.value.rampTest == RampTest.BLIND && rampUp) {
+                            if (blindArms.isEmpty()) blindArms.addAll(if (random.nextBoolean()) "AB".toList() else "BA".toList())
+                            val arm = blindArms.removeFirst()
+                            rampRateNow = if (arm == 'A') BLIND_RATE_A else BLIND_RATE_B
+                            rampGuardNow = if (arm == 'A') RAMP_ECHO_LAG_LEVELS else rampGuardFor(BLIND_RATE_B)
+                            trace?.invoke("ramp arm=$arm rate=$rampRateNow/s guard=$rampGuardNow")
+                        }
                         rampTick(reading)
                         return
                     } else {
@@ -506,8 +542,10 @@ class BikeControl(
             rampTime = clock()
             return
         }
+        val rate = rampRateNow ?: state.value.rampRate
+        val guard = rampGuardNow ?: if (state.value.rampTest == RampTest.GUARD_SCALED) rampGuardFor(rate) else RAMP_ECHO_LAG_LEVELS
         val expected = expectedResistance
-        if (expected != null && abs(reading.resistance - expected) > RAMP_ECHO_LAG_LEVELS) {
+        if (expected != null && abs(reading.resistance - expected) > guard) {
             // Pause rather than keep writing against a knob that has been moved.
             if (rampOffSince == 0L) rampOffSince = clock()
             else if (clock() - rampOffSince > ACK_TIMEOUT_MS) stop("Resistance changed manually or command not acknowledged")
@@ -517,7 +555,7 @@ class BikeControl(
         rampOffSince = 0L
         val seconds = ((clock() - rampTime) / 1000f).coerceIn(0f, .2f)
         rampTime = clock()
-        val step = state.value.rampRate * seconds
+        val step = rate * seconds
         val next = if (goal > ramp) minOf(ramp + step, goal.toFloat()) else maxOf(ramp - step, goal.toFloat())
         rampLevel = next
         val level = next.roundToInt()
@@ -526,7 +564,7 @@ class BikeControl(
             if (!writeResistance(level)) { stop("Resistance command failed"); return }
             expectedResistance = level
             commandTime = clock()
-            ackTimeoutMs = ACK_TIMEOUT_MS + RAMP_ECHO_LAG_LEVELS * ACK_MS_PER_LEVEL
+            ackTimeoutMs = ACK_TIMEOUT_MS + guard * ACK_MS_PER_LEVEL
         }
         requestedResistance = level.toFloat()
         if (level == goal) {
@@ -639,6 +677,14 @@ class BikeControl(
         fun nextRampRate(current: Int): Int = RAMP_RATE_PRESETS.firstOrNull { it > current } ?: RAMP_RATE_PRESETS.first()
         const val RAMP_TICK_MS = 100L
         const val RAMP_ECHO_LAG_LEVELS = 5
+        // The Bike+ echo (target read back every 200 ms) refreshes every ~0.4-0.6 s and shows a level written
+        // 0.2-0.83 s earlier (Nov 5 ramp ride, 95 writes). A guard of that much ramp time plus one level for
+        // rounding lets a normal echo lag through: 10 at 10/s, 12 at 12/s, 15 at 15/s, 19 at 20/s.
+        const val RAMP_ECHO_LAG_S = .9f
+        fun rampGuardFor(rate: Int): Int = maxOf(RAMP_ECHO_LAG_LEVELS, kotlin.math.ceil(rate * RAMP_ECHO_LAG_S).toInt() + 1)
+        // BLIND arms: A = today's guard at 12/s (~10.5 levels/s effective with stalls), B = scaled guard at 10/s.
+        const val BLIND_RATE_A = 12
+        const val BLIND_RATE_B = 10
         // ERG holds within half a resistance level's watts, never less than 3 W.
         const val DEADBAND_LEVEL_FRACTION = .5f
         const val MIN_DEADBAND_WATTS = 3f

@@ -70,10 +70,16 @@ class PelotonBikePlusSensorInterface(val context: Context, controlSupported: Boo
         try {
             val binding = getV2Binder(context)
             try {
-                val sensor = BikePlusCombinedSensor(binding.binder) { sample ->
+                val sensor = BikePlusCombinedSensor(binding.binder, onSample = { sample ->
                     bikeControl.acceptSample(sample)
                     observeFlywheel(sample)
-                }
+                }, motorTrace = if (com.spop.poverlay.BuildConfig.DEBUG) { data ->
+                    // Debug builds: every 50 ms poll, to see whether the motor moves smoothly or in steps
+                    // (the target echo alone cannot show it). cur = currentResistance, tgt = targetResistance.
+                    timber.log.Timber.tag("ErgTrace").d("motor stepper=%d cur=%d tgt=%d power=%.1f rpm=%d",
+                        data.stepperMotorPosition, data.currentResistance, data.targetResistance,
+                        data.power / 100.0, data.rpm)
+                } else null)
                 activeSensor = sensor
                 try {
                     sensor.start()

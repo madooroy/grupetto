@@ -9,7 +9,9 @@ data class BikeCoreData(
     val rpm: Long,
     val power: Long,
     val currentResistance: Int,
-    val targetResistance: Int
+    val targetResistance: Int,
+    /** Raw stepper motor position; read for the debug motor trace only (meaning and units unverified). */
+    val stepperMotorPosition: Long = 0L
 )
 
 /**
@@ -21,9 +23,9 @@ data class BikeCoreData(
 fun readBikeCoreData(parcel: Parcel): BikeCoreData {
     val rpm = parcel.readLong()
     val power = parcel.readLong()
-    parcel.readLong() // mStepperMotorPosition - unused
+    val stepperMotorPosition = parcel.readLong() // mStepperMotorPosition - debug motor trace only
     parcel.readLong() // mLoadCellReading - unused
     val currentResistance = parcel.readInt()
     val targetResistance = parcel.readInt()
-    return BikeCoreData(rpm, power, currentResistance, targetResistance)
+    return BikeCoreData(rpm, power, currentResistance, targetResistance, stepperMotorPosition)
 }
