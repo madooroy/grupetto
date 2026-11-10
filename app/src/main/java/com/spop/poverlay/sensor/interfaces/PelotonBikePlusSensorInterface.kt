@@ -29,7 +29,15 @@ class PelotonBikePlusSensorInterface(val context: Context, controlSupported: Boo
     @Volatile private var activeSensor: BikePlusCombinedSensor? = null
     override val bikeControl = com.spop.poverlay.control.BikeControl(
         controlSupported, android.os.SystemClock::elapsedRealtime
-    ) { activeSensor?.setResistance(it) == true }.apply {
+    ) { level ->
+        // Debug builds: the motor trace polls 4x as often against the same bike service; flag slow writes.
+        val started = android.os.SystemClock.elapsedRealtime()
+        val ok = activeSensor?.setResistance(level) == true
+        val took = android.os.SystemClock.elapsedRealtime() - started
+        if (com.spop.poverlay.BuildConfig.DEBUG && took > 20)
+            timber.log.Timber.tag("ErgTrace").d("write slow level=%d ms=%d ok=%s", level, took, ok)
+        ok
+    }.apply {
         // Debug builds log every ERG input and decision under the "ErgTrace" logcat tag.
         if (com.spop.poverlay.BuildConfig.DEBUG) trace = { timber.log.Timber.tag("ErgTrace").d(it) }
     }

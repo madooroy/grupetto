@@ -12,8 +12,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 private const val READ_DELAY = 200L
-// Debug motor trace: poll this often, but hand control/flows a sample only every ~READ_DELAY.
+// Debug motor trace: poll this often, but hand control/flows only every MOTOR_TRACE_EMIT_EVERY-th read.
 private const val MOTOR_TRACE_POLL_MS = 50L
+private const val MOTOR_TRACE_EMIT_EVERY = 4
 
 /**
  * Counts consecutive errors, and throws an exception if the limit is reached
@@ -41,8 +42,8 @@ class BikePlusCombinedSensor(
     private val onSample: (com.spop.poverlay.control.BikeSample?) -> Unit = {},
     /**
      * Debug builds: called with every raw read, polled every MOTOR_TRACE_POLL_MS instead of READ_DELAY.
-     * Control and the sensor flows still get a sample only about every READ_DELAY (CadenceHistory and the
-     * spin-up check count samples), so control sees ~220 ms instead of ~205 ms between samples.
+     * Control and the sensor flows still get every 4th read only (CadenceHistory and the spin-up check count
+     * samples): 4 x (50 ms + read time), about 200-230 ms apart instead of ~205 ms.
      */
     private val motorTrace: ((com.spop.poverlay.sensor.BikeCoreData) -> Unit)? = null
 ) : SensorInterface {
@@ -82,7 +83,7 @@ class BikePlusCombinedSensor(
         thread(name = "BikePlusSensorPoller") {
             Timber.i("Starting BikePlus polling thread")
             val pollDelay = if (motorTrace != null) MOTOR_TRACE_POLL_MS else READ_DELAY
-            var lastEmit = 0L
+            var reads = 0
             try {
                 while (threadRunning.get()) {
                     val parcel = Parcel.obtain()
@@ -96,10 +97,8 @@ class BikePlusCombinedSensor(
                         
                         val bikeData = readBikeCoreData(parcel2)
                         motorTrace?.invoke(bikeData)
-                        val now = android.os.SystemClock.elapsedRealtime()
                         // Trace-only polls in between (no `continue`: that would skip the sleep below).
-                        if (motorTrace == null || now - lastEmit >= READ_DELAY - MOTOR_TRACE_POLL_MS / 2) {
-                            lastEmit = now
+                        if (motorTrace == null || reads++ % MOTOR_TRACE_EMIT_EVERY == 0) {
 
                             // Emit values
                             // Power is divided by 100 in original BikePlusPowerSensor
