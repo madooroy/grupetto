@@ -112,6 +112,8 @@ class OverlaySensorViewModel(
     }
     fun cycleRampRate() {
         val control = sensorInterface.bikeControl ?: return
+        // BLIND ramp experiment: the chip reads "Ramp ?", so a tap must not silently change the stored rate.
+        if (control.state.value.rampTest == com.spop.poverlay.control.RampTest.BLIND) return
         val next = control.cycleRampRate()
         application.getSharedPreferences(com.spop.poverlay.ConfigurationRepository.SharedPrefsName, android.content.Context.MODE_PRIVATE)
             .edit().putInt("bikeRampRate", next).apply()
