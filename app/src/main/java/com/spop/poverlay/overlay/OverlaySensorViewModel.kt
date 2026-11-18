@@ -98,6 +98,7 @@ class OverlaySensorViewModel(
             com.spop.poverlay.control.RampTest.OFF -> "Ramp ${it.rampRate}/s"
             com.spop.poverlay.control.RampTest.GUARD_SCALED -> "Ramp ${it.rampRate}/s G"
             com.spop.poverlay.control.RampTest.BLIND -> "Ramp ?"
+            com.spop.poverlay.control.RampTest.ONE_SHOT -> "Ramp 1x"
         } else null
     }
     /** Debug builds only (long-press on the ramp chip); not saved, so every app start is back to OFF. */

@@ -56,8 +56,12 @@ data class Simulation(val wind: Float, val grade: Float, val rolling: Float, val
  *   The chip hides which; logged as "ramp arm=". A cancelled jump puts its arm back.
  * In both test modes every stall is logged ("ramp stall lead=" / "ramp resume after="), so a contaminated
  * effort is visible. OFF logs nothing new.
+ * ONE_SHOT: a modeled jump of at most ONE_SHOT_MAX_LEVELS, at a held cadence of ONE_SHOT_MIN_CADENCE or more and
+ *   after spin-up, is a single write of the goal level (like one turn of the knob) instead of a ramp: the Bike+
+ *   moves its motor in one move instead of the 3 chunks a ramp gives (Nov 18 50 ms trace). Anything else ramps
+ *   as in OFF, and the reason is logged ("oneshot write" / "oneshot skip").
  */
-enum class RampTest { OFF, GUARD_SCALED, BLIND }
+enum class RampTest { OFF, ONE_SHOT, GUARD_SCALED, BLIND }
 
 /** Serialized, clock-injected control core. No Android stubs or sleeping threads in tests.
  * Motor transaction and proportional ERG approach inspired by dwj300's PR #50.
@@ -184,7 +188,7 @@ class BikeControl(
         return next
     }
 
-    /** Debug builds: step the ramp experiment OFF -> GUARD_SCALED -> BLIND -> OFF (see [RampTest]). */
+    /** Debug builds: step the ramp experiment OFF -> ONE_SHOT -> GUARD_SCALED -> BLIND -> OFF (see [RampTest]). */
     @Synchronized fun cycleRampTest(): RampTest {
         val next = RampTest.values()[(state.value.rampTest.ordinal + 1) % RampTest.values().size]
         mutableState.value = state.value.copy(rampTest = next)
@@ -424,6 +428,32 @@ class BikeControl(
                             abs(targetWatts - measured) < FEED_FORWARD_MIN_WATTS -> "trim(small change)"
                             else -> "trim(no model)"
                         })
+                    val oneShotCadence = cadenceAverage ?: reading.cadence
+                    val oneShotLevels = if (level != null) abs(level - reading.resistance) else 0
+                    val oneShot = level != null && state.value.rampTest == RampTest.ONE_SHOT &&
+                        oneShotLevels <= ONE_SHOT_MAX_LEVELS && oneShotCadence >= ONE_SHOT_MIN_CADENCE && !spinningUp()
+                    if (level != null && state.value.rampTest == RampTest.ONE_SHOT) trace?.invoke(
+                        if (oneShot) "oneshot write level=$level from=${reading.resistance} levels=$oneShotLevels cad=${f1(oneShotCadence)}"
+                        else "oneshot skip levels=$oneShotLevels cad=${f1(oneShotCadence)} spinUp=${spinningUp()} -> ramp")
+                    if (level != null && oneShot) {
+                        feedForwardLevel = level.toFloat()
+                        feedForwardUntil = clock() + FEED_FORWARD_SETTLE_MS
+                        feedForwardArrivalPending = true
+                        feedForwardDeadline = clock() + FEED_FORWARD_MAX_MS
+                        filteredPower = null
+                        lastFiltered = null; lastError = null; lastBand = null
+                        rampLevel = null
+                        // One write of the goal; the ordinary path then waits for the echo to reach it. The bike takes
+                        // ~0.5-0.65 s per target and the echo lags, so allow ONE_SHOT_ACK_MS_PER_LEVEL per level
+                        // (12 levels: 3.3 s) before an echo that never arrives counts as a knob or ignored write.
+                        if (!writeResistance(level)) { stop("Resistance command failed"); return }
+                        expectedResistance = level
+                        commandTime = clock()
+                        ackTimeoutMs = ACK_TIMEOUT_MS + oneShotLevels * ONE_SHOT_ACK_MS_PER_LEVEL
+                        requestedResistance = level.toFloat()
+                        previousTick = clock()
+                        return
+                    }
                     if (level != null) {
                         feedForwardLevel = level.toFloat()
                         feedForwardUntil = clock() + FEED_FORWARD_SETTLE_MS
@@ -712,6 +742,10 @@ class BikeControl(
         // BLIND arms: A = today's guard at 12/s (~10.5 levels/s effective with stalls), B = scaled guard at 10/s.
         const val BLIND_RATE_A = 12
         const val BLIND_RATE_B = 10
+        // ONE_SHOT test: a single write for jumps up to this size (larger ones ramp), at a held cadence of 85+ rpm.
+        const val ONE_SHOT_MAX_LEVELS = 12
+        const val ONE_SHOT_MIN_CADENCE = 85f
+        const val ONE_SHOT_ACK_MS_PER_LEVEL = 150L
         // ERG holds within half a resistance level's watts, never less than 3 W.
         const val DEADBAND_LEVEL_FRACTION = .5f
         const val MIN_DEADBAND_WATTS = 3f

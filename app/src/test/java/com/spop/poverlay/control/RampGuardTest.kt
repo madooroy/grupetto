@@ -2,6 +2,7 @@ package com.spop.poverlay.control
 
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.math.abs
 
 /**
  * Debug ramp experiment ([RampTest]). The Bike+ is modeled as a target register: Grupetto's writes and the
@@ -248,9 +249,68 @@ class RampGuardTest {
     @Test fun cycleRampTestWrapsAndTraces() {
         val control = bike()
         assertEquals(RampTest.OFF, control.state.value.rampTest)
+        assertEquals(RampTest.ONE_SHOT, control.cycleRampTest())
         assertEquals(RampTest.GUARD_SCALED, control.cycleRampTest())
         assertEquals(RampTest.BLIND, control.cycleRampTest())
         assertEquals(RampTest.OFF, control.cycleRampTest())
-        assertEquals(3, lines.count { "tune rampTest=" in it })
+        assertEquals(4, lines.count { "tune rampTest=" in it })
+    }
+
+    private fun jumpLevels(): Pair<Int, Int> = lines.first { "action=jump" in it }.let {
+        it.substringAfter(" level=").substringBefore(" ").toInt() to it.substringAfter("jump to=").substringBefore(" ").toInt()
+    }
+
+    /** ONE_SHOT, jumps up to 12 levels at 90 rpm, up and down: one write of the goal, no ramp writes, ERG keeps control. */
+    @Test fun oneShotSingleWrite() {
+        for ((from, to) in listOf(170 to 230, 170 to 260, 260 to 170)) for ((refresh, delay) in listOf(listOf(500L) to 300L, jittered to 400L)) {
+            val control = setUp(RampTest.ONE_SHOT, 10, base = from)
+            control.localErg(to)
+            ride(control, 8_000, refresh, delay)
+            val (a, b) = jumpLevels()
+            println("ONE_SHOT $from->$to levels $a->$b refresh=$refresh")
+            assertTrue("$a->$b", abs(b - a) in 2..BikeControl.ONE_SHOT_MAX_LEVELS)
+            assertEquals(lines.joinToString("\n"), 1, lines.count { "oneshot write level=$b " in it })
+            assertTrue(lines.none { "why=ramp" in it })
+            assertTrue(lines.joinToString("\n"), lines.none { "write level=" in it && "oneshot" !in it && "why=trim" !in it })
+            assertTrue(lines.any { "arrive level=$b" in it })
+            assertEquals(lines.takeLast(10).joinToString("\n"), ControlMode.Erg, control.state.value.mode)
+        }
+    }
+
+    /** Larger jumps, and lower cadence, fall back to the normal ramp. */
+    @Test fun oneShotFallsBackToRamp() {
+        var control = setUp(RampTest.ONE_SHOT, 10, base = 150)
+        control.localErg(420)
+        ride(control, 6_000)
+        val (a, b) = jumpLevels()
+        assertTrue("$a->$b", b - a > BikeControl.ONE_SHOT_MAX_LEVELS)
+        assertTrue(lines.any { "oneshot skip" in it } && lines.any { "why=ramp" in it } && lines.any { "ramp done" in it })
+        assertEquals(ControlMode.Erg, control.state.value.mode)
+
+        lines.clear(); events.clear()
+        control = bike(); control.tune(2, .007f, rampRate = 10)
+        while (control.state.value.rampTest != RampTest.ONE_SHOT) control.cycleRampTest()
+        settle(control, 40)
+        assertTrue(control.localErg(150)); ride(control, 8_000, cadence = 80f)
+        lines.clear()
+        control.localErg(200)
+        ride(control, 6_000, cadence = 80f)
+        assertTrue(lines.joinToString("\n"), lines.any { "oneshot skip" in it && it.substringAfter("cad=").substringBefore(" ").toFloat() < BikeControl.ONE_SHOT_MIN_CADENCE })
+        assertTrue(lines.none { "oneshot write" in it })
+    }
+
+    /** A knob turned and held away from the one-shot goal: the echo never arrives, so control stops within the ack window. */
+    @Test fun oneShotKnobStops() {
+        val control = setUp(RampTest.ONE_SHOT, 10, base = 170)
+        control.localErg(230)
+        var heldFrom = -1
+        ride(control, 6_000) { t -> if (t in 300..6000) { if (heldFrom < 0) heldFrom = t; 42 } else null }
+        val (a, b) = jumpLevels()
+        assertTrue("$a->$b", b > a)
+        assertEquals(lines.takeLast(10).joinToString("\n"), ControlMode.Manual, control.state.value.mode)
+        val stopAt = time(lines.first { "stop" in it.lowercase() && "manually" in it })
+        println("one-shot knob: stopped ${stopAt - time(lines.first { "oneshot write" in it })}ms after the write")
+        assertTrue(stopAt - time(lines.first { "oneshot write" in it }) <= BikeControl.ACK_TIMEOUT_MS +
+            BikeControl.ONE_SHOT_MAX_LEVELS * BikeControl.ONE_SHOT_ACK_MS_PER_LEVEL + 300)
     }
 }
