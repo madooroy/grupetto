@@ -56,7 +56,7 @@ class PelotonBikePlusSensorInterface(val context: Context, controlSupported: Boo
     // also runs on the Bike+ and CrossTrainer, which have no calibration screen. Debug builds log it once a second.
     private val flywheelTemperature =
         (context.applicationContext as? com.spop.poverlay.GrupettoApplication)?.grupettoCalibration?.flywheelTemperature
-    private var flywheelTracedAt = Long.MIN_VALUE
+    private var flywheelTracedAt = 0L  // not MIN_VALUE: now - MIN_VALUE overflows negative and the line never logs
     private fun observeFlywheel(sample: com.spop.poverlay.control.BikeSample?) {
         val tracker = flywheelTemperature ?: return
         val now = android.os.SystemClock.elapsedRealtime()
