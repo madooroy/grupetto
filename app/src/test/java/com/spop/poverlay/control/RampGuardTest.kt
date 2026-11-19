@@ -310,7 +310,58 @@ class RampGuardTest {
         assertEquals(lines.takeLast(10).joinToString("\n"), ControlMode.Manual, control.state.value.mode)
         val stopAt = time(lines.first { "stop" in it.lowercase() && "manually" in it })
         println("one-shot knob: stopped ${stopAt - time(lines.first { "oneshot write" in it })}ms after the write")
-        assertTrue(stopAt - time(lines.first { "oneshot write" in it }) <= BikeControl.ACK_TIMEOUT_MS +
-            BikeControl.ONE_SHOT_MAX_LEVELS * BikeControl.ONE_SHOT_ACK_MS_PER_LEVEL + 300)
+        assertTrue(stopAt - time(lines.first { "oneshot write" in it }) <= BikeControl.ONE_SHOT_ACK_MS + 300)
+    }
+
+    /** Review finding 2: braking right after a one-shot, with the stopped bike never finishing the write, keeps ERG. */
+    @Test fun oneShotBrakeDuringWaitKeepsErg() {
+        val control = setUp(RampTest.ONE_SHOT, 10, base = 170)
+        val start = echo
+        control.localErg(230)
+        ride(control, 200)
+        assertTrue(lines.any { "oneshot write" in it })
+        events.add(now to start)  // the bike holds the old target while stopped
+        ride(control, 3_000, cadence = 0f)
+        assertTrue(lines.joinToString("\n"), lines.any { "oneshot cancelled (stopped)" in it })
+        assertEquals(lines.takeLast(10).joinToString("\n"), ControlMode.Erg, control.state.value.mode)
+        ride(control, 25_000)
+        assertEquals(lines.takeLast(10).joinToString("\n"), ControlMode.Erg, control.state.value.mode)
+        assertTrue(lines.count { "action=jump" in it } >= 2)
+    }
+
+    /** Finding 4: a target change during the wait is taken once the first echo arrives; ERG keeps control. */
+    @Test fun oneShotTargetChangeDuringWait() {
+        for ((refresh, delay) in listOf(listOf(500L) to 300L, listOf(800L) to 650L)) {
+            val control = setUp(RampTest.ONE_SHOT, 10, base = 170)
+            control.localErg(260); ride(control, 300, refresh, delay)
+            control.localErg(200); ride(control, 8_000, refresh, delay)
+            assertEquals(lines.takeLast(10).joinToString("\n"), ControlMode.Erg, control.state.value.mode)
+            assertEquals(lines.joinToString("\n"), 2, lines.count { "oneshot write" in it })
+        }
+    }
+
+    /** Finding 3: a small jump on the slowest echo (800 ms refresh, 650 ms old) arrives inside the flat window. */
+    @Test fun oneShotSmallJumpSlowEcho() {
+        val control = setUp(RampTest.ONE_SHOT, 10, base = 170)
+        control.localErg(190); ride(control, 6_000, listOf(800L), 650L)
+        val (a, b) = jumpLevels()
+        println("small one-shot $a->$b")
+        assertTrue("$a->$b", b - a in 1..4)
+        assertTrue(lines.any { "oneshot write" in it } && lines.any { "arrive level=$b" in it })
+        assertEquals(ControlMode.Erg, control.state.value.mode)
+    }
+
+    /** Finding 1: which ride jumps qualify at 90 rpm. 165->362 W is too large and ramps; 200<->320 W one-shots. */
+    @Test fun oneShotWhichWorkoutJumpsQualify() {
+        var control = setUp(RampTest.ONE_SHOT, 10, base = 165)
+        control.localErg(362); ride(control, 6_000)
+        println("165->362: " + lines.first { "oneshot" in it })
+        assertTrue(lines.any { "oneshot skip" in it })
+        for ((from, to) in listOf(200 to 320, 320 to 200, 200 to 300, 300 to 200)) {
+            control = setUp(RampTest.ONE_SHOT, 10, base = from)
+            control.localErg(to); ride(control, 6_000)
+            println("$from->$to: " + lines.first { "oneshot" in it })
+            assertTrue(lines.any { "oneshot write" in it })
+        }
     }
 }

@@ -98,6 +98,8 @@ class BikeControl(
     // The settle window starts when the bike reports the modeled level, not when it was
     // commanded: on long jumps the motor runs slower than the command rate.
     private var feedForwardArrivalPending = false
+    // ONE_SHOT test: a single write is waiting for its echo (cleared on arrival, a stop, or any cleared jump).
+    private var oneShotWaiting = false
     private var feedForwardDeadline = 0L
     // Smooth ramp toward the modeled level: one level per 100 ms tick, so the motor turns
     // continuously instead of moving in bursts between write/echo round trips.
@@ -229,6 +231,7 @@ class BikeControl(
         if (releaseControl) owner = null
         pausedMode = null
         expectedResistance = null
+        oneShotWaiting = false
         filteredPower = null
         clearFeedForward()
         mutableState.value = state.value.copy(mode = ControlMode.Manual, shiftOffset = 0, message = reason, externalControl = null,
@@ -327,11 +330,21 @@ class BikeControl(
         previousTick = clock()
         val expected = expectedResistance
         if (expected != null && reading.resistance != expected) {
-            // Allow the binder target echo to catch up. Do not keep moving the motor
-            // against a knob override or a mainboard that ignored a write.
-            if (clock() - commandTime > ackTimeoutMs) stop("Resistance changed manually or command not acknowledged")
-            return
+            if (oneShotWaiting && reading.cadence < PEDALING_STOP_RPM) {
+                // Stopped while a one-shot write is still on its way: as for a ramp, the stopped bike may never
+                // finish it, so expect nothing and let the stop branch below end the jump (review finding 2).
+                trace?.invoke("oneshot cancelled (stopped) at=${reading.resistance} goal=$expected cad=${f1(reading.cadence)}")
+                oneShotWaiting = false
+                expectedResistance = null
+                commandTime = clock()
+            } else {
+                // Allow the binder target echo to catch up. Do not keep moving the motor
+                // against a knob override or a mainboard that ignored a write.
+                if (clock() - commandTime > ackTimeoutMs) stop("Resistance changed manually or command not acknowledged")
+                return
+            }
         }
+        if (expected != null && reading.resistance == expected) oneShotWaiting = false
         if (reading.cadence < PEDALING_STOP_RPM) {
             filteredPower = null
             requestedResistance = reading.resistance.toFloat()
@@ -443,13 +456,14 @@ class BikeControl(
                         filteredPower = null
                         lastFiltered = null; lastError = null; lastBand = null
                         rampLevel = null
-                        // One write of the goal; the ordinary path then waits for the echo to reach it. The bike takes
-                        // ~0.5-0.65 s per target and the echo lags, so allow ONE_SHOT_ACK_MS_PER_LEVEL per level
-                        // (12 levels: 3.3 s) before an echo that never arrives counts as a knob or ignored write.
+                        // One write of the goal; the ordinary path then waits for the echo to reach it. The echo shows
+                        // the target, so its delay does not grow with jump size: one flat ONE_SHOT_ACK_MS window
+                        // (review finding 3) before an echo that never arrives counts as a knob or ignored write.
                         if (!writeResistance(level)) { stop("Resistance command failed"); return }
                         expectedResistance = level
                         commandTime = clock()
-                        ackTimeoutMs = ACK_TIMEOUT_MS + oneShotLevels * ONE_SHOT_ACK_MS_PER_LEVEL
+                        ackTimeoutMs = ONE_SHOT_ACK_MS
+                        oneShotWaiting = true
                         requestedResistance = level.toFloat()
                         previousTick = clock()
                         return
@@ -661,6 +675,7 @@ class BikeControl(
 
     /** Forget any modeled jump: its ramp, settle hold and arrival wait. */
     private fun clearFeedForward() {
+        oneShotWaiting = false
         feedForwardTarget = null
         feedForwardUntil = 0L
         feedForwardArrivalPending = false
@@ -745,7 +760,7 @@ class BikeControl(
         // ONE_SHOT test: a single write for jumps up to this size (larger ones ramp), at a held cadence of 85+ rpm.
         const val ONE_SHOT_MAX_LEVELS = 12
         const val ONE_SHOT_MIN_CADENCE = 85f
-        const val ONE_SHOT_ACK_MS_PER_LEVEL = 150L
+        const val ONE_SHOT_ACK_MS = 2500L
         // ERG holds within half a resistance level's watts, never less than 3 W.
         const val DEADBAND_LEVEL_FRACTION = .5f
         const val MIN_DEADBAND_WATTS = 3f
