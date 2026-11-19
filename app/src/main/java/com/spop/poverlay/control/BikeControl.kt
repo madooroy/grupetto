@@ -54,10 +54,15 @@ data class Simulation(val wind: Float, val grade: Float, val rolling: Float, val
  * BLIND: each up-jump of BLIND_MIN_LEVELS or more takes the next arm from shuffled blocks of four (AABB):
  *   arm A = guard 5 at 12/s, arm B = scaled guard at 10/s (about the same average speed, ~10 levels/s).
  *   The chip hides which; logged as "ramp arm=". A cancelled jump puts its arm back.
- * In both test modes every stall is logged ("ramp stall lead=" / "ramp resume after="), so a contaminated
- * effort is visible. OFF logs nothing new.
+ * STEPS: a jump of STEPS_MIN_LEVELS or more is split into 2-4 steps, biggest first ([BikeControl.frontLoadedSteps]:
+ *   39 -> 56 is 48, 53, 56). Each step is written once and the next only after the bike reports it took the last,
+ *   so every look of the Bike+ mainboard (~every 0.5 s) moves the motor one planned step: a fast start and a soft
+ *   landing, like a hand on the knob, instead of whatever the ramp happened to reach (G on Nov 18: +2, +6, +9).
+ *   Logged as "steps plan=" / "why=step k/n" / "step took".
+ * In the GUARD_SCALED and BLIND modes every stall is logged ("ramp stall lead=" / "ramp resume after="), so a
+ * contaminated effort is visible. OFF logs nothing new.
  */
-enum class RampTest { OFF, GUARD_SCALED, BLIND }
+enum class RampTest { OFF, GUARD_SCALED, STEPS, BLIND }
 
 /** Serialized, clock-injected control core. No Android stubs or sleeping threads in tests.
  * Motor transaction and proportional ERG approach inspired by dwj300's PR #50.
@@ -110,6 +115,10 @@ class BikeControl(
     private val blindArms = ArrayDeque<Char>()
     private var rampArm: Char? = null
     private var rampStallLead = 0
+    // STEPS ramp experiment: the planned levels for the jump in flight, the step last written (-1 = none yet) and when.
+    private var stepPlan: IntArray? = null
+    private var stepIndex = -1
+    private var stepWrittenAt = 0L
     private var rampOffSince = 0L
     private var steadyResistance = -1
     private var steadySince = 0L
@@ -184,7 +193,7 @@ class BikeControl(
         return next
     }
 
-    /** Debug builds: step the ramp experiment OFF -> GUARD_SCALED -> BLIND -> OFF (see [RampTest]). */
+    /** Debug builds: step the ramp experiment OFF -> GUARD_SCALED -> STEPS -> BLIND -> OFF (see [RampTest]). */
     @Synchronized fun cycleRampTest(): RampTest {
         val next = RampTest.values()[(state.value.rampTest.ordinal + 1) % RampTest.values().size]
         mutableState.value = state.value.copy(rampTest = next)
@@ -437,6 +446,11 @@ class BikeControl(
                         againstSamples = 0
                         rampTime = clock() - RAMP_TICK_MS
                         rampOffSince = 0L
+                        // STEPS is decided per jump: changing the experiment mid-jump does not change the jump in flight.
+                        stepPlan = if (state.value.rampTest == RampTest.STEPS && abs(level - reading.resistance) >= STEPS_MIN_LEVELS)
+                            frontLoadedSteps(reading.resistance, level) else null
+                        stepIndex = -1
+                        stepPlan?.let { trace?.invoke("steps plan=${it.joinToString(",")} from=${reading.resistance}") }
                         if (rampArm != null) trace?.invoke("ramp arm=$rampArm rate=$rampRateNow/s guard=$rampGuardNow")
                         rampTick(reading)
                         return
@@ -557,6 +571,7 @@ class BikeControl(
             rampTime = clock()
             return
         }
+        stepPlan?.let { stepTick(reading, it, goal); return }
         val rate = rampRateNow ?: state.value.rampRate
         val guard = rampGuardNow ?: if (state.value.rampTest == RampTest.GUARD_SCALED) rampGuardFor(rate) else RAMP_ECHO_LAG_LEVELS
         val expected = expectedResistance
@@ -601,6 +616,41 @@ class BikeControl(
         }
     }
 
+    /**
+     * STEPS: write the next planned step only once the bike reports the last one (the echo reaches it), so each
+     * look of the mainboard takes exactly one planned step. A step not taken within RAMP_ACK_MAX_MS is a knob
+     * override or ignored writes: stop, as the ramp does.
+     */
+    private fun stepTick(reading: BikeSample, plan: IntArray, goal: Int) {
+        val taken = stepIndex >= 0 && if (rampUp) reading.resistance >= plan[stepIndex] else reading.resistance <= plan[stepIndex]
+        if (stepIndex >= 0 && !taken) {
+            if (clock() - stepWrittenAt > RAMP_ACK_MAX_MS) stop("Resistance changed manually or command not acknowledged")
+            return
+        }
+        if (stepIndex >= 0) trace?.invoke("step took level=${reading.resistance} step=${stepIndex + 1}/${plan.size}" +
+            " after=${clock() - stepWrittenAt}ms")
+        stepIndex++
+        val level = plan[stepIndex]
+        trace?.invoke("write level=$level from=${reading.resistance} why=step ${stepIndex + 1}/${plan.size} goal=$goal")
+        if (!writeResistance(level)) { stop("Resistance command failed"); return }
+        expectedResistance = level
+        commandTime = clock()
+        stepWrittenAt = clock()
+        ackTimeoutMs = RAMP_ACK_MAX_MS
+        rampLevel = level.toFloat()
+        requestedResistance = level.toFloat()
+        if (stepIndex == plan.lastIndex) {
+            // The last step is written: from here the jump ends as a ramp does (arrival is awaited by the ERG path).
+            trace?.invoke("ramp done level=$level after=${clock() - targetChangedAt}ms steps=${plan.size}")
+            stepPlan = null
+            stepIndex = -1
+            rampLevel = null
+            rampExtreme = null
+            previousTick = clock()
+            feedForwardDeadline = maxOf(feedForwardDeadline, clock() + ARRIVAL_AFTER_RAMP_MS)
+        }
+    }
+
     private fun spinningUp(): Boolean = !pedaling || (!spinUpDone && clock() - pedalingSince < SPIN_UP_MS)
 
     /**
@@ -638,6 +688,8 @@ class BikeControl(
         rampLevel = null
         rampExtreme = null
         againstSamples = 0
+        stepPlan = null
+        stepIndex = -1
         // A stop (or anything else that drops the jump) also ends a spin-up wait: the next restart waits afresh.
         waitingTarget = null
         waitSince = 0L
@@ -712,6 +764,33 @@ class BikeControl(
         // BLIND arms: A = today's guard at 12/s (~10.5 levels/s effective with stalls), B = scaled guard at 10/s.
         const val BLIND_RATE_A = 12
         const val BLIND_RATE_B = 10
+        // STEPS: jumps this large or larger are stepped; smaller ones use the normal ramp.
+        const val STEPS_MIN_LEVELS = 4
+        // About this many levels per step (one mainboard look each, ~0.5 s), 2 to STEPS_MAX steps.
+        const val STEPS_LEVELS_PER_STEP = 6
+        const val STEPS_MAX = 4
+        /**
+         * Front-loaded steps from [from] to [to]: n = 2..STEPS_MAX steps (about STEPS_LEVELS_PER_STEP levels each),
+         * sized n : n-1 : ... : 1, so the motor starts fast and lands softly (39 -> 56: 48, 53, 56; 47 -> 55: 52, 55).
+         * Strictly monotonic and ends exactly at [to].
+         */
+        fun frontLoadedSteps(from: Int, to: Int): IntArray {
+            val distance = abs(to - from)
+            if (distance == 0) return intArrayOf(to)
+            val n = kotlin.math.ceil(distance / STEPS_LEVELS_PER_STEP.toFloat()).toInt().coerceIn(2, STEPS_MAX).coerceAtMost(distance)
+            val total = n * (n + 1) / 2
+            val sign = if (to > from) 1 else -1
+            var sum = 0
+            val levels = mutableListOf<Int>()
+            for (k in 1..n) {
+                sum += n - k + 1
+                val offset = (distance * sum / total.toFloat()).roundToInt()
+                val level = from + sign * offset
+                if (levels.lastOrNull() != level && level != from) levels += level
+            }
+            if (levels.last() != to) levels += to
+            return levels.toIntArray()
+        }
         // ERG holds within half a resistance level's watts, never less than 3 W.
         const val DEADBAND_LEVEL_FRACTION = .5f
         const val MIN_DEADBAND_WATTS = 3f

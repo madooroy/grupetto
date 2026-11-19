@@ -97,6 +97,7 @@ class OverlaySensorViewModel(
         if (it.connected && it.mode == com.spop.poverlay.control.ControlMode.Erg) when (it.rampTest) {
             com.spop.poverlay.control.RampTest.OFF -> "Ramp ${it.rampRate}/s"
             com.spop.poverlay.control.RampTest.GUARD_SCALED -> "Ramp ${it.rampRate}/s G"
+            com.spop.poverlay.control.RampTest.STEPS -> "Ramp steps"
             com.spop.poverlay.control.RampTest.BLIND -> "Ramp ?"
         } else null
     }

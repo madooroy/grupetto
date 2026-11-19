@@ -2,6 +2,7 @@ package com.spop.poverlay.control
 
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.math.abs
 
 /**
  * Debug ramp experiment ([RampTest]). The Bike+ is modeled as a target register: Grupetto's writes and the
@@ -249,8 +250,126 @@ class RampGuardTest {
         val control = bike()
         assertEquals(RampTest.OFF, control.state.value.rampTest)
         assertEquals(RampTest.GUARD_SCALED, control.cycleRampTest())
+        assertEquals(RampTest.STEPS, control.cycleRampTest())
         assertEquals(RampTest.BLIND, control.cycleRampTest())
         assertEquals(RampTest.OFF, control.cycleRampTest())
-        assertEquals(3, lines.count { "tune rampTest=" in it })
+        assertEquals(4, lines.count { "tune rampTest=" in it })
+    }
+
+    // ---- STEPS: front-loaded steps, one per mainboard look ----
+
+    @Test fun frontLoadedStepsPlan() {
+        assertArrayEquals(intArrayOf(48, 53, 56), BikeControl.frontLoadedSteps(39, 56))
+        assertArrayEquals(intArrayOf(47, 42, 39), BikeControl.frontLoadedSteps(56, 39))
+        assertArrayEquals(intArrayOf(52, 55), BikeControl.frontLoadedSteps(47, 55))
+        assertArrayEquals(intArrayOf(43, 44), BikeControl.frontLoadedSteps(40, 44))
+        assertArrayEquals(intArrayOf(40, 48, 53, 55), BikeControl.frontLoadedSteps(30, 55))
+        for (from in 0..80) for (to in 0..80) {
+            if (abs(to - from) < BikeControl.STEPS_MIN_LEVELS) continue
+            val plan = BikeControl.frontLoadedSteps(from, to)
+            val sizes = (listOf(from) + plan.toList()).zipWithNext { a, b -> abs(b - a) }
+            assertEquals("$from->$to ${plan.toList()}", to, plan.last())
+            assertTrue("$from->$to ${plan.toList()}", plan.size in 2..BikeControl.STEPS_MAX)
+            assertTrue("$from->$to strictly monotonic ${plan.toList()}", sizes.all { it > 0 } &&
+                (listOf(from) + plan.toList()).zipWithNext { a, b -> (b - a) * (to - from) > 0 }.all { it })
+            assertTrue("$from->$to front-loaded ${plan.toList()}", sizes.zipWithNext { a, b -> a >= b }.all { it })
+        }
+    }
+
+    private fun levelOf(line: String) = line.substringAfter("level=").substringBefore(" ").toInt()
+    private fun planOf() = lines.last { "steps plan=" in it }.substringAfter("plan=").substringBefore(" ").split(",").map(String::toInt)
+
+    /**
+     * A big jump up and back down: every planned step is written once, in order, each only after the echo shows the
+     * last one, the bike's target register holds exactly the plan, and ERG stays on. Steady and jittered echoes.
+     */
+    @Test fun stepsWriteOnePlannedStepPerLook() {
+        for ((refresh, delay) in listOf(listOf(500L) to 300L, listOf(600L) to 200L, jittered to 400L)) {
+            val control = setUp(RampTest.STEPS, 15, base = 165)
+            val writesBefore = events.size
+            val start = now
+            control.localErg(362); ride(control, 6_000, refresh, delay)
+            assertEquals(lines.takeLast(15).joinToString("\n"), ControlMode.Erg, control.state.value.mode)
+            val plan = planOf()
+            val stepLines = lines.filter { "why=step" in it }
+            println("STEPS up refresh=$refresh delay=$delay plan=$plan writes=${stepLines.map(::time).map { it - start }} " +
+                lines.filter { "step took" in it }.map { it.substringAfter("after=") })
+            assertTrue("plan $plan", plan.size >= 2)
+            assertEquals(plan, stepLines.map(::levelOf))
+            assertEquals(plan.size - 1, lines.count { "step took" in it })
+            assertTrue(lines.any { "ramp done level=${plan.last()}" in it && "steps=${plan.size}" in it })
+            assertEquals("bike target register holds exactly the plan", plan, events.drop(writesBefore).map { it.second }.distinct())
+            assertTrue("no ramp writes in STEPS", lines.none { "why=ramp" in it })
+            // Each step waits for the previous one: ~one echo refresh each, never more than two.
+            assertTrue(time(stepLines.last()) - time(stepLines.first()) <= (plan.size - 1) * 2L * refresh.max())
+
+            lines.clear()
+            control.localErg(165); ride(control, 15_000, refresh, delay)
+            assertEquals(ControlMode.Erg, control.state.value.mode)
+            if (lines.any { "steps plan=" in it }) {
+                val down = planOf()
+                assertEquals(down, lines.filter { "why=step" in it }.map(::levelOf))
+                assertTrue("down plan $down", down.zipWithNext { a, b -> b < a }.all { it })
+            }
+        }
+    }
+
+    /** A jump under STEPS_MIN_LEVELS uses the normal ramp even in STEPS. */
+    @Test fun smallJumpUsesRamp() {
+        val control = setUp(RampTest.STEPS, 10, base = 165)
+        control.localErg(185); ride(control, 6_000)
+        val jump = lines.firstOrNull { "action=jump" in it } ?: return  // a change this small may only trim
+        val size = abs(jump.substringAfter("jump to=").substringBefore(" ").toInt() - levelOf(jump))
+        assertTrue("jump of $size", size < BikeControl.STEPS_MIN_LEVELS)
+        assertTrue(lines.none { "steps plan=" in it || "why=step" in it })
+    }
+
+    /** The knob turned back while a step is pending stops ERG (the ramp's knob check still runs in STEPS). */
+    @Test fun stepsKnobBackStops() {
+        val control = setUp(RampTest.STEPS, 10, base = 165)
+        control.localErg(362)
+        var held: Int? = null
+        ride(control, 4_000, knob = { t -> if (t in 800..2400) (held ?: (echo - 3).also { held = it }) else null })
+        println("STEPS knob back to $held: " + (lines.firstOrNull { "knob override" in it } ?: lines.firstOrNull { "stop reason" in it }))
+        assertEquals(ControlMode.Manual, control.state.value.mode)
+    }
+
+    /** The bike ignores writes: the first step is never taken, so STEPS stops within RAMP_ACK_MAX_MS (+ one tick). */
+    @Test fun stepsBikeIgnoringWritesStops() {
+        val control = setUp(RampTest.STEPS, 10, base = 165)
+        ignoreWrites = true
+        val start = now
+        control.localErg(362); ride(control, 6_000)
+        val stop = lines.firstOrNull { "stop reason" in it }
+        println("STEPS ignored writes: stopped ${stop?.let { time(it) - start }}ms, ${lines.count { "why=step" in it }} step writes")
+        assertEquals(ControlMode.Manual, control.state.value.mode)
+        assertEquals(1, lines.count { "why=step" in it })
+        assertTrue(time(stop!!) - start <= BikeControl.RAMP_ACK_MAX_MS + 300)
+    }
+
+    /** A new target mid-steps cancels the plan; the new jump gets its own plan and finishes. */
+    @Test fun stepsTargetChangeMidJump() {
+        val control = setUp(RampTest.STEPS, 10, base = 165)
+        control.localErg(300); ride(control, 400)
+        assertTrue(lines.any { "steps plan=" in it })
+        lines.clear()
+        control.localErg(362); ride(control, 8_000)
+        assertEquals(ControlMode.Erg, control.state.value.mode)
+        assertTrue(lines.joinToString("\n"), lines.any { "ramp cancelled" in it })
+        val plan = planOf()
+        assertEquals(plan, lines.filter { "why=step" in it }.map(::levelOf).takeLast(plan.size))
+        assertTrue(lines.any { "ramp done level=${plan.last()}" in it })
+    }
+
+    /** Leaving STEPS mid-jump does not change the jump in flight; the next jump ramps normally. */
+    @Test fun cyclingOutOfStepsMidJump() {
+        val control = setUp(RampTest.STEPS, 10, base = 165)
+        control.localErg(362); ride(control, 200)
+        control.cycleRampTest()
+        assertEquals(RampTest.BLIND, control.state.value.rampTest)
+        ride(control, 6_000)
+        assertEquals(ControlMode.Erg, control.state.value.mode)
+        assertTrue(lines.any { "ramp done" in it && "steps=" in it })
+        assertTrue(lines.none { "why=ramp" in it })
     }
 }
