@@ -119,6 +119,7 @@ class BikeControl(
     private var stepPlan: IntArray? = null
     private var stepIndex = -1
     private var stepWrittenAt = 0L
+    private var stepRetried = false
     private var rampOffSince = 0L
     private var steadyResistance = -1
     private var steadySince = 0L
@@ -622,10 +623,25 @@ class BikeControl(
      * override or ignored writes: stop, as the ramp does.
      */
     private fun stepTick(reading: BikeSample, plan: IntArray, goal: Int) {
-        val taken = stepIndex >= 0 && if (rampUp) reading.resistance >= plan[stepIndex] else reading.resistance <= plan[stepIndex]
-        if (stepIndex >= 0 && !taken) {
-            if (clock() - stepWrittenAt > RAMP_ACK_MAX_MS) stop("Resistance changed manually or command not acknowledged")
-            return
+        if (stepIndex >= 0) {
+            val step = plan[stepIndex]
+            // The bike's target only reaches a step because we wrote it. An echo PAST the pending step (further up on
+            // an up-jump, further down on a drop) is the knob, not the bike taking the step: stop, as the ramp does.
+            if (if (rampUp) reading.resistance > step else reading.resistance < step) {
+                trace?.invoke("step knob override level=${reading.resistance} step=$step goal=$goal")
+                stop("Resistance changed manually"); return
+            }
+            if (reading.resistance != step) {
+                val waited = clock() - stepWrittenAt
+                if (waited > RAMP_ACK_MAX_MS) { stop("Resistance changed manually or command not acknowledged"); return }
+                // One lost write must not end ERG on an intermediate step: rewrite the same step once (never ahead).
+                if (!stepRetried && waited >= STEP_RETRY_MS) {
+                    stepRetried = true
+                    trace?.invoke("write level=$step from=${reading.resistance} why=step ${stepIndex + 1}/${plan.size} retry goal=$goal")
+                    if (!writeResistance(step)) stop("Resistance command failed") else commandTime = clock()
+                }
+                return
+            }
         }
         if (stepIndex >= 0) trace?.invoke("step took level=${reading.resistance} step=${stepIndex + 1}/${plan.size}" +
             " after=${clock() - stepWrittenAt}ms")
@@ -636,6 +652,7 @@ class BikeControl(
         expectedResistance = level
         commandTime = clock()
         stepWrittenAt = clock()
+        stepRetried = false
         ackTimeoutMs = RAMP_ACK_MAX_MS
         rampLevel = level.toFloat()
         requestedResistance = level.toFloat()
@@ -759,6 +776,8 @@ class BikeControl(
         const val RAMP_ECHO_LAG_S = 1.3f
         fun rampGuardFor(rate: Int): Int = maxOf(RAMP_ECHO_LAG_LEVELS, kotlin.math.ceil(rate * RAMP_ECHO_LAG_S).toInt() + 2)
         const val RAMP_ACK_MAX_MS = 2500L
+        /** STEPS: rewrite a step once if the echo has not shown it by then (~2 board looks); the ack limit still counts from the first write. */
+        const val STEP_RETRY_MS = 1200L
         // BLIND arms go only to jumps this large: smaller ones barely stall either way.
         const val BLIND_MIN_LEVELS = 8
         // BLIND arms: A = today's guard at 12/s (~10.5 levels/s effective with stalls), B = scaled guard at 10/s.
