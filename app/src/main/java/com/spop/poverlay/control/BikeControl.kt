@@ -643,7 +643,7 @@ class BikeControl(
     companion object {
         const val RESISTANCE_RATE = 3f
         // Most a rise's remembered effort cadence may exceed the current one (rpm).
-        const val RISE_CADENCE_ALLOWANCE = 12f
+        const val RISE_CADENCE_ALLOWANCE = 20f   // 90 rpm floats to 110 rpm efforts (Marc, Nov 21)
         // Highest level a modeled jump may target; the fit covers levels 18-63.
         const val FEED_FORWARD_MAX_LEVEL = 75
         // Modeled jumps ramp at 15 levels/s by default (Marc's choice after the Nov 2026 rides: 345 W in 2.5 s,
