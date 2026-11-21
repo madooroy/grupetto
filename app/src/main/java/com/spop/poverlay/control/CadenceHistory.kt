@@ -13,7 +13,8 @@ import kotlin.math.abs
  * Only the most recent of that riding counts: a rider who warmed up at 88 rpm and then
  * rode every interval and recovery at 72 rpm had recoveries sized for 87 rpm for the next
  * ten minutes, a level-5 drop that undershot 165 W by 38-46 W.
- * Climbs keep the current cadence: riders have usually already spun up by then.
+ * Climbs use it too when the rider held a faster cadence at about that target before: on Nov 21 the 362 W
+ * efforts were ridden at 100 rpm but sized from the 92 rpm float, and landed one level heavy each time.
  */
 class CadenceHistory {
     private data class Entry(val time: Long, val cadence: Float, val watts: Int)

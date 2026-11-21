@@ -46,4 +46,17 @@ class ErgHuntTest {
         assertTrue("first effort hunted (moves, lowest W): $worst", worst[0].first <= 8 && worst[0].second >= 330f)
         assertTrue("hunting at 362 W (moves, lowest W): $worst", worst.drop(1).all { it.first <= 4 && it.second >= 340f })
     }
+
+    @Test fun laterEffortsLandOnTheLevelThatHeldAtTheEffortCadence() {
+        // Efforts ridden at 100 rpm from a 92 rpm float: the first is sized from 92 rpm and lands heavy; once 100 rpm
+        // has been held at the target, later jumps are sized from it and land on the level that held (Nov 21: 56 for 55).
+        ride(2, 90f); assertEquals(1, cmd(0).result)
+        target(165); ride(60, 92f)
+        val landings = (1..5).map {
+            target(355); ride(3, 100f); val landed = level; ride(27, 100f); val held = level
+            target(165); ride(30, 92f); landed to held
+        }
+        assertTrue("first effort lands heavy: $landings", landings[0].first > landings[0].second)
+        assertTrue("later efforts land where they hold: $landings", landings.drop(1).all { it.first == it.second })
+    }
 }

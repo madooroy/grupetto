@@ -349,8 +349,17 @@ class BikeControl(
                     val remembered = held ?: typical
                     val current = cadenceAverage ?: reading.cadence
                     val floor = current - DROP_CADENCE_ALLOWANCE
-                    val cadence = if (drop && remembered != null) maxOf(remembered, floor) else current
+                    // A rise to a target the rider has already held uses the faster cadence they held there (Nov 21:
+                    // 362 W efforts ridden at 100 rpm, jumps sized from the 92 rpm float landed one level heavy, 56 for
+                    // 55, every time), at most RISE_CADENCE_ALLOWANCE above now so a stale memory can't land far light.
+                    val heldRise = if (!drop) cadenceHistory.cadenceAt(targetWatts, clock())?.takeIf { it > current } else null
+                    val cadence = when {
+                        drop && remembered != null -> maxOf(remembered, floor)
+                        heldRise != null -> minOf(heldRise, current + RISE_CADENCE_ALLOWANCE)
+                        else -> current
+                    }
                     val cadenceSource = when {
+                        heldRise != null -> "heldRise"
                         drop && remembered != null && floor > remembered -> "floor"
                         held != null -> "held"
                         typical != null -> "median2m"
@@ -633,6 +642,8 @@ class BikeControl(
 
     companion object {
         const val RESISTANCE_RATE = 3f
+        // Most a rise's remembered effort cadence may exceed the current one (rpm).
+        const val RISE_CADENCE_ALLOWANCE = 12f
         // Highest level a modeled jump may target; the fit covers levels 18-63.
         const val FEED_FORWARD_MAX_LEVEL = 75
         // Modeled jumps ramp at 15 levels/s by default (Marc's choice after the Nov 2026 rides: 345 W in 2.5 s,
