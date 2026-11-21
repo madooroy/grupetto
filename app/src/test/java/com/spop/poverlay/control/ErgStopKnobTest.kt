@@ -9,7 +9,7 @@ class ErgStopKnobTest {
     private var resistance = 40
     private val writes = mutableListOf<Int>()
     private val lines = mutableListOf<String>()
-    private val control = BikeControl(true, { now }) { writes.add(it); resistance = it; true }.apply {
+    private val control = BikeControl(true, { now }) { writes.add(it); resistance = it; true }.atTestRamp().apply {
         trace = { lines.add("[$now] $it") }
     }
     private fun watts(cadence: Float) =
@@ -22,7 +22,7 @@ class ErgStopKnobTest {
             control.tick()
         }
     }
-    private fun laggingBike(): BikeControl = BikeControl(true, { now }) { writes.add(it); true }.apply {
+    private fun laggingBike(): BikeControl = BikeControl(true, { now }) { writes.add(it); true }.atTestRamp().apply {
         trace = { lines.add("[$now] $it") }
     }
     private fun settle(bike: BikeControl, level: Int) =

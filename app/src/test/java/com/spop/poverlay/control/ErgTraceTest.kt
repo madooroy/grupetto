@@ -11,7 +11,7 @@ class ErgTraceTest {
         var resistance = 30
         val writes = mutableListOf<Pair<Long, Int>>()
         val lines = mutableListOf<String>()
-        val control = BikeControl(true, { now }) { writes.add(now to it); resistance = it; true }.apply {
+        val control = BikeControl(true, { now }) { writes.add(now to it); resistance = it; true }.atTestRamp().apply {
             if (traced) trace = { lines.add(it) }
         }
         // Bike+-like plant, so feed-forward, ramps, arrivals and trims all happen.

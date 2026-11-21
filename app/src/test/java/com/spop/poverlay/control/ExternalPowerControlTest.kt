@@ -8,7 +8,7 @@ class ExternalPowerControlTest {
     private var now = 1000L
     private var resistance = 40
     private val writes = mutableListOf<Int>()
-    private val control = BikeControl(true, { now }) { resistance = it; writes.add(it); true }
+    private val control = BikeControl(true, { now }) { resistance = it; writes.add(it); true }.atTestRamp()
     private fun meter(watts: Int = 250, address: String = "a") = control.useExternalPower(ExternalPowerReading(watts, now, address))
     private fun sample(power: Float = 100f, cadence: Float = 80f) {
         control.acceptSample(BikeSample(power, cadence, resistance, now))

@@ -15,7 +15,7 @@ class ErgSafetyTest {
     private var resistance = 40
     private val writes = mutableListOf<Int>()
     private val lines = mutableListOf<String>()
-    private val control = BikeControl(true, { now }) { writes.add(it); resistance = it; true }.apply {
+    private val control = BikeControl(true, { now }) { writes.add(it); resistance = it; true }.atTestRamp().apply {
         trace = { lines.add("[$now] $it") }
     }
     private fun watts(cadence: Float) =
@@ -217,7 +217,7 @@ class ErgSafetyTest {
     @Test fun echoLagDuringARampIsNotAKnobMove() {
         resistance = 44
         var held = 44
-        val lagging = BikeControl(true, { now }) { writes.add(it); true }   // the bike reports late
+        val lagging = BikeControl(true, { now }) { writes.add(it); true }.atTestRamp()   // the bike reports late
         var t = 0
         repeat(150) { lagging.acceptSample(BikeSample(170f, 90f, 44, now)); now += 100; lagging.tick() }
         assertTrue(lagging.localErg(320))
@@ -239,7 +239,7 @@ class ErgSafetyTest {
     }
 
     /** A bike that reports late: the echo follows the last write by up to [lag] levels per sample. */
-    private fun laggingBike(): BikeControl = BikeControl(true, { now }) { writes.add(it); true }.apply {
+    private fun laggingBike(): BikeControl = BikeControl(true, { now }) { writes.add(it); true }.atTestRamp().apply {
         trace = { lines.add("[$now] $it") }
     }
     private fun settle(bike: BikeControl, level: Int) =

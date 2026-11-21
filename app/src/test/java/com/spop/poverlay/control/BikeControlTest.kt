@@ -13,7 +13,7 @@ class BikeControlTest {
         writes.add(it)
         if (writeSucceeds && !holdEcho) resistance = it
         writeSucceeds
-    }
+    }.atTestRamp()
     private fun sample(power: Float = 100f, cadence: Float = 80f, elapsed: Long = 200) {
         now += elapsed
         control.acceptSample(BikeSample(power, cadence, resistance, now))
@@ -24,6 +24,10 @@ class BikeControlTest {
     private fun acquire() { pedal(100f, 80f); assertEquals(1, command(0).result) }
     /** Steady pedaling past the spin-up window, so modeled jumps are allowed. */
     private fun pedal(power: Float = 168f, cadence: Float = 90f) = repeat(80) { sample(power, cadence) }
+
+    @Test fun defaultRampIsFifteenPerSecond() {
+        assertEquals(15, BikeControl(true, { now }) { true }.state.value.rampRate)
+    }
 
     @Test fun requiresFreshConnectedHardware() {
         assertEquals(4, command(0).result)
@@ -407,7 +411,7 @@ class BikeControlTest {
         assertEquals(listOf(45, 46, 47), writes)
     }
     @Test fun rampSpeedIsAdjustableAndClamped() {
-        assertEquals(BikeControl.RAMP_RATE_DEFAULT, control.state.value.rampRate)
+        assertEquals(10, control.state.value.rampRate)   // pinned by atTestRamp()
         control.tune(2, .007f, rampRate = 15)
         assertEquals(15, control.state.value.rampRate)
         control.tune(2, .007f, rampRate = 100)

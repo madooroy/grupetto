@@ -66,8 +66,7 @@ fun OverlayMinimizedContent(
     powerSourceLabel: String? = null,
     rampLabel: String? = null,
     flywheelLabel: String? = null,
-    onRampTap: () -> Unit = {},
-    onRampLongPress: (() -> Unit)? = null
+    onRampTap: () -> Unit = {}
 ) {
     val backgroundShape = if (isMinimized) {
         RoundedCornerShape(8.dp)
@@ -143,21 +142,15 @@ fun OverlayMinimizedContent(
 
         if (rampLabel != null) {
             // Tap to step the ERG ramp speed mid-ride (opening settings would leave the ride).
-            // Debug builds: a hold past the long-press timeout steps the ramp experiment instead of the rate.
-            // Release builds pass no long-press handler, so any press length is a tap, as with clickable.
             Spacer(modifier = Modifier.width(6.dp))
             val rampTap by rememberUpdatedState(onRampTap)
-            val rampLongPress by rememberUpdatedState(onRampLongPress)
             Text(
                 rampLabel,
                 color = Color(0xFF6EE7B7),
                 fontSize = 13.sp,
                 modifier = Modifier
                     .background(Color(0x5552728F), RoundedCornerShape(6.dp))
-                    .pointerInput(onRampLongPress != null) {
-                        detectTapGestures(onTap = { rampTap() },
-                            onLongPress = if (rampLongPress != null) { _ -> rampLongPress?.invoke() } else null)
-                    }
+                    .pointerInput(Unit) { detectTapGestures(onTap = { rampTap() }) }
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
