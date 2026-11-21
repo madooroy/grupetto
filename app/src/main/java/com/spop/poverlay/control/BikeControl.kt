@@ -418,12 +418,16 @@ class BikeControl(
                     // 6 W near 160 W but 13 W near 345 W, so a fixed 3 W band hunted at high power.
                     val level = requestedResistance.roundToInt().coerceIn(0, 99)
                     val cadence = cadenceAverage ?: reading.cadence
-                    val band = maxOf(MIN_DEADBAND_WATTS,
-                        DEADBAND_LEVEL_FRACTION * (powerModel.wattsAt(level + 1, cadence) - powerModel.wattsAt(level, cadence)))
+                    val wattsPerLevel = (powerModel.wattsAt(level + 1, cadence) - powerModel.wattsAt(level, cadence)).coerceAtLeast(1f)
+                    val band = maxOf(MIN_DEADBAND_WATTS, DEADBAND_LEVEL_FRACTION * wattsPerLevel)
                     lastFiltered = power
                     lastError = error
                     lastBand = band
-                    requestedResistance + if (abs(error) <= band) 0f else state.value.gain * error * dt / .1f
+                    // Trim in levels per watt of error scaled to the local watts per level, so the loop is as calm at
+                    // 362 W (~13 W/level) as at 165 W (~6 W/level). Unscaled it hunted 52<->57 on Nov 21 efforts
+                    // (322-413 W at a steady 100 rpm) while the same gain was smooth at endurance power.
+                    requestedResistance + if (abs(error) <= band) 0f
+                        else state.value.gain * error * dt / .1f * (TRIM_REF_WATTS_PER_LEVEL / wattsPerLevel)
                 }
             }
             ControlMode.Simulation -> simBase + simulation.resistanceOffset(state.value.inclineSensitivity) + state.value.shiftOffset
@@ -647,6 +651,8 @@ class BikeControl(
         // ERG holds within half a resistance level's watts, never less than 3 W.
         const val DEADBAND_LEVEL_FRACTION = .5f
         const val MIN_DEADBAND_WATTS = 3f
+        // Watts per level at which the trim gain is as tuned (endurance power, ~165 W at 90 rpm).
+        const val TRIM_REF_WATTS_PER_LEVEL = 6f
         const val CADENCE_AVERAGE_S = 5f
         const val STEADY_AFTER_CHANGE_MS = 8000L
         const val ACK_TIMEOUT_MS = 1500L
