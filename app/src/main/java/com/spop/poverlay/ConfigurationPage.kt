@@ -43,6 +43,7 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
     val release by viewModel.latestRelease
     val boot by viewModel.autoStartOnBoot.collectAsStateWithLifecycle()
     val timer by viewModel.showTimerWhenMinimized.collectAsStateWithLifecycle()
+    val overlayChart by viewModel.showOverlayChart.collectAsStateWithLifecycle()
     val ble by viewModel.bleTxEnabled.collectAsStateWithLifecycle()
     val dircon by viewModel.dirConEnabled.collectAsStateWithLifecycle()
     val dirconStatus by viewModel.dirConStatus.collectAsStateWithLifecycle()
@@ -128,6 +129,7 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
                     SettingsTile(if (running) "Overlay · Running" else "Overlay · Ready", Modifier.weight(1f).fillMaxHeight(), Color(0xFF34D399)) {
                         SettingSwitch("Start on boot", boot, viewModel::onAutoStartOnBootClicked)
                         SettingSwitch("Timer when minimized", timer, viewModel::onShowTimerWhenMinimizedClicked)
+                        SettingSwitch("Chart in the overlay", overlayChart, viewModel::onShowOverlayChartClicked)
                     }
                     SettingsTile("Broadcast connections", Modifier.weight(1f).fillMaxHeight(), Color(0xFF60A5FA)) {
                         ConnectionSummary("Bluetooth", if (viewModel.isPreview) "Preview" else if (ble) "On · Grupetto" else "Off", ble)
