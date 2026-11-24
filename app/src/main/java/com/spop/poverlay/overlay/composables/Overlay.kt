@@ -344,7 +344,8 @@ fun Overlay(
                     onSpeedUnitClicked = { sensorViewModel.onClickedSpeedUnit() },
                     onChartClicked = { sensorViewModel.onOverlayPressed() },
                     shrinkChart = shrinkChart,
-                    onShrinkChartToggled = { shrinkChart = !shrinkChart }
+                    onShrinkChartToggled = { shrinkChart = !shrinkChart },
+                    showChart = timerViewModel.showOverlayChart.collectAsState().value
                 )
                 }
             }

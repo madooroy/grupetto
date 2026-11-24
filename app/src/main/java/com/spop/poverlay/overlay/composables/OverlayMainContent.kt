@@ -69,6 +69,7 @@ fun OverlayMainContent(
         // Hoisted so the setting survives the content being dropped while minimized.
         shrinkChart: Boolean,
         onShrinkChartToggled: () -> Unit,
+        showChart: Boolean = true,
         powerComparison: String? = null,
         powerSourceLabel: String = if (powerComparison != null) "External" else "Power"
 ) {
@@ -257,7 +258,7 @@ fun OverlayMainContent(
             if (showInclineCard) {
                 inclineCard()
             }
-            chart()
+            if (showChart) chart()
             speedCard()
             if (showHeartRateCard) {
                 heartRateCard()
@@ -270,7 +271,7 @@ fun OverlayMainContent(
             if (showCadenceCard) {
                 cadenceCard()
             }
-            chart()
+            if (showChart) chart()
             if (showResistanceCard) {
                 resistanceCard()
             }

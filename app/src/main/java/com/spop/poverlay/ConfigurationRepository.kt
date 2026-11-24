@@ -15,6 +15,7 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
 
     enum class Preferences(val key: String) {
         ShowTimerWhenMinimized("showTimerWhenMinimized"),
+        ShowOverlayChart("showOverlayChart"),
         ShowShifters("showShifters"),
         ShifterInset("shifterInset"),
         BleTxEnabled("bleTxEnabled"),
@@ -36,6 +37,8 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
     }
 
     private val mutableShowTimerWhenMinimized = MutableStateFlow(true)
+    /** The live chart in the expanded overlay; off leaves just the numbers. */
+    val showOverlayChart = MutableStateFlow(true)
     val showShifters = MutableStateFlow(true)
     val shifterInset = MutableStateFlow(0f)
     private val mutableBleTxEnabled = MutableStateFlow(true)
@@ -75,6 +78,11 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
                 close()
             }
         })
+    }
+
+    fun setShowOverlayChart(isShown: Boolean) {
+        showOverlayChart.value = isShown
+        sharedPreferences.edit().putBoolean(Preferences.ShowOverlayChart.key, isShown).apply()
     }
 
     fun setShowTimerWhenMinimized(isShown: Boolean) {
@@ -165,6 +173,7 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
         mutableShowTimerWhenMinimized.value =
             sharedPreferences
                 .getBoolean(Preferences.ShowTimerWhenMinimized.key, true)
+        showOverlayChart.value = sharedPreferences.getBoolean(Preferences.ShowOverlayChart.key, true)
 
         mutableBleTxEnabled.value =
             sharedPreferences
