@@ -56,6 +56,11 @@ class MainActivity : ComponentActivity() {
                 ReleaseChecker()
             )
         viewModel.finishActivity.observe(this) {
+            // Overlay started: go to the tablet's home (the Peloton app on a Peloton, else the launcher) rather than
+            // back to whatever opened Grupetto, such as Settings' App info.
+            runCatching {
+                startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
             finish()
         }
         viewModel.requestOverlayPermission.observe(this) {
