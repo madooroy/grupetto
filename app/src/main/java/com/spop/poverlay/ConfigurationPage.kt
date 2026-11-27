@@ -10,6 +10,10 @@ import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -684,7 +688,7 @@ private fun StatusCheck(modifier: Modifier, ok: Boolean, title: String, detail: 
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = .4f))) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (ok) androidx.compose.material.icons.Icons.Filled.CheckCircle else androidx.compose.material.icons.Icons.Filled.Info,
+            Icon(if (ok) Icons.Filled.CheckCircle else Icons.Filled.Info,
                 contentDescription = null, tint = accent)
             Spacer(Modifier.width(10.dp))
             Column {
@@ -703,7 +707,7 @@ private fun OverlayToggle(label: String, on: Boolean, modifier: Modifier, onClic
         shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, if (on) Color(0xFF2F7A55) else Color(0xFF2A3A4B))) {
         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (on) androidx.compose.material.icons.Icons.Filled.CheckCircle else androidx.compose.material.icons.Icons.Filled.AddCircle,
+            Icon(if (on) Icons.Filled.CheckCircle else Icons.Filled.AddCircle,
                 contentDescription = if (on) "Shown" else "Hidden", tint = if (on) Color(0xFF34D399) else Color(0xFF52728F))
             Spacer(Modifier.width(8.dp))
             Text(label, fontSize = 15.sp, color = if (on) Color(0xFFE6EDF5) else Color(0xFF9EAEC0))
