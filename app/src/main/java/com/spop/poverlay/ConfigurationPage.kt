@@ -371,7 +371,7 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
             title = { Text("Quit Grupetto?") },
             text = {
                 Text("The overlay closes, ERG stops, and " +
-                    (bike.externalControl?.let { "the app connected over $it" } ?: "training apps") + " lose the bike.")
+                    (bike.externalControl?.let { "the app connected over $it loses the bike." } ?: "training apps lose the bike."))
             },
             confirmButton = { TextButton({ dialog = null; viewModel.onQuitClicked() }) { Text("Quit") } },
             dismissButton = { TextButton({ dialog = null }) { Text("Cancel") } }
