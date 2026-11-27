@@ -114,15 +114,19 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
                             ?: "Your ride, connected", color = Color(0xFF9EAEC0), fontSize = 14.sp)
                     }
                     // Start the overlay and stay here (more settings to change); Ride hides this screen.
-                    if (!running) Button(viewModel::startOverlay, Modifier.heightIn(min = 48.dp)) { Text("Start overlay") }
-                    else {
+                    if (!running) {
+                        Button(viewModel::startOverlay, Modifier.heightIn(min = 48.dp)) { Text("Start overlay") }
+                        // Out of settings without quitting anything.
+                        OutlinedButton(viewModel::onRideClicked, Modifier.heightIn(min = 48.dp).padding(start = 12.dp)) { Text("Close") }
+                    } else {
                         if (advanced) OutlinedButton(viewModel::onStartServiceClicked, Modifier.heightIn(min = 48.dp).padding(end = 12.dp)) {
                             Text("Restart overlay")
                         }
                         Button(viewModel::onRideClicked, Modifier.heightIn(min = 48.dp)) { Text("Ride (hide settings)") }
                     }
                     if (advanced) TextButton({ advanced = false }, Modifier.padding(start = 12.dp)) { Text("Basic settings") }
-                    TextButton(viewModel::onQuitClicked, Modifier.padding(start = 12.dp)) { Text("Quit") }
+                    // Quitting drops the overlay, ERG and every app's connection: name it fully and ask first.
+                    TextButton({ dialog = "quit" }, Modifier.padding(start = 12.dp)) { Text("Quit Grupetto") }
                 }
                 Row(Modifier.fillMaxWidth().height(58.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -362,6 +366,16 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
             else ShifterSettings(showShifters, shifterInset, viewModel::setShowShifters, viewModel::setShifterInset,
                 onPreview = { previewShifters = it })
         }
+        "quit" -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text("Quit Grupetto?") },
+            text = {
+                Text("The overlay closes, ERG stops, and " +
+                    (bike.externalControl?.let { "the app connected over $it" } ?: "training apps") + " lose the bike.")
+            },
+            confirmButton = { TextButton({ dialog = null; viewModel.onQuitClicked() }) { Text("Quit") } },
+            dismissButton = { TextButton({ dialog = null }) { Text("Cancel") } }
+        )
         "shifters" -> SettingsDialog("Shift buttons", { dialog = null }) {
             ShifterSettings(showShifters, shifterInset, viewModel::setShowShifters, viewModel::setShifterInset,
                 onPreview = { previewShifters = it })
