@@ -133,6 +133,15 @@ class OverlaySensorViewModel(
             this, SharingStarted.Eagerly, defaultMetricFor(sensorInterface.deviceType)
         )
 
+    // Flywheel (brake disc) temperature estimate for the overlay bar's chip, while the bike reports power.
+    val flywheelLabel: Flow<String?> = ((application as? com.spop.poverlay.GrupettoApplication)?.grupettoCalibration
+        ?.flywheelTemperature?.state ?: kotlinx.coroutines.flow.flowOf(null)).map { state ->
+        state?.takeIf { it.receivingPower }?.let {
+            val unit = it.displayUnit
+            "Flywheel ${kotlin.math.round(unit.fromFahrenheit(it.fahrenheit)).toInt()}${unit.symbol}"
+        }
+    }
+
     /** Which primary metric cards to show, derived reactively from [visibleMetrics]. */
     val showPowerCard: StateFlow<Boolean> = visibleMetricFlow(MetricType.POWER)
     val showCadenceCard: StateFlow<Boolean> = visibleMetricFlow(MetricType.CADENCE)
