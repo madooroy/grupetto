@@ -113,8 +113,13 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
                         Text(viewModel.emulatedModel?.let { "${it.label} emulation · Simulated data · Radios off" }
                             ?: "Your ride, connected", color = Color(0xFF9EAEC0), fontSize = 14.sp)
                     }
-                    Button(viewModel::onStartServiceClicked, Modifier.heightIn(min = 48.dp)) {
-                        Text(if (running) "Restart overlay" else "Start overlay")
+                    // Start the overlay and stay here (more settings to change); Ride hides this screen.
+                    if (!running) Button(viewModel::startOverlay, Modifier.heightIn(min = 48.dp)) { Text("Start overlay") }
+                    else {
+                        if (advanced) OutlinedButton(viewModel::onStartServiceClicked, Modifier.heightIn(min = 48.dp).padding(end = 12.dp)) {
+                            Text("Restart overlay")
+                        }
+                        Button(viewModel::onRideClicked, Modifier.heightIn(min = 48.dp)) { Text("Ride (hide settings)") }
                     }
                     if (advanced) TextButton({ advanced = false }, Modifier.padding(start = 12.dp)) { Text("Basic settings") }
                     TextButton(viewModel::onQuitClicked, Modifier.padding(start = 12.dp)) { Text("Quit") }
@@ -219,7 +224,7 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
                         onOverlayItem = viewModel::setOverlayItem, onTimer = viewModel::onShowTimerWhenMinimizedClicked,
                         onBoot = viewModel::onAutoStartOnBootClicked, onBle = viewModel::onBleTxEnabledClicked,
                         onDirCon = viewModel::onDirConEnabledClicked, onShifters = viewModel::setShowShifters,
-                        onDialog = { dialog = it }, onAdvanced = { advanced = true })
+                        onDialog = { dialog = it }, onAdvanced = { advanced = true }, onStartOverlay = viewModel::startOverlay)
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Grupetto ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = Color(0xFF9EAEC0),
@@ -355,6 +360,10 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
             if (tab == 0) TrainerControls(bike, viewModel::startErg, viewModel::startSimulation,
                 viewModel::stopBikeControl, viewModel::setBikeResistance, viewModel::setBikeTuning)
             else ShifterSettings(showShifters, shifterInset, viewModel::setShowShifters, viewModel::setShifterInset,
+                onPreview = { previewShifters = it })
+        }
+        "shifters" -> SettingsDialog("Shift buttons", { dialog = null }) {
+            ShifterSettings(showShifters, shifterInset, viewModel::setShowShifters, viewModel::setShifterInset,
                 onPreview = { previewShifters = it })
         }
         "heart" -> HeartRateManagerDialog(hr, discovered, saved, scanning, match,
@@ -619,7 +628,7 @@ private fun BasicSettings(
     heartRateMonitor: String?, bpm: Int?, powerMeter: String?, meterWatts: Int?, bikeReporting: Boolean,
     onOverlayItem: (OverlayItem, Boolean) -> Unit, onTimer: (Boolean) -> Unit, onBoot: (Boolean) -> Unit,
     onBle: (Boolean) -> Unit, onDirCon: (Boolean) -> Unit, onShifters: (Boolean) -> Unit,
-    onDialog: (String) -> Unit, onAdvanced: () -> Unit,
+    onDialog: (String) -> Unit, onAdvanced: () -> Unit, onStartOverlay: () -> Unit,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -632,9 +641,11 @@ private fun BasicSettings(
                     isTread -> "Reading speed and incline"
                     else -> "Reading power and cadence"
                 })
+            // Off: the check itself starts it (people tap the card, not the button in the corner).
             StatusCheck(Modifier.weight(1f), overlayRunning,
                 if (overlayRunning) "Overlay running" else "Overlay off",
-                if (overlayRunning) "Floating over the Peloton screen" else "Tap Start overlay")
+                if (overlayRunning) "Floating over the Peloton screen" else "Tap here to start it",
+                onClick = if (overlayRunning) null else onStartOverlay)
             val app = bike.externalControl
             StatusCheck(Modifier.weight(1f), app != null,
                 if (app != null) "App connected" else "No app connected",
@@ -646,7 +657,7 @@ private fun BasicSettings(
                     Text("Tap to show or hide.", fontSize = 13.sp, color = Color(0xFF9EAEC0))
                     val toggles: List<Triple<String, Boolean, (Boolean) -> Unit>> =
                         itemsForDevice.map { item -> Triple(item.label, item in overlayItems, { on: Boolean -> onOverlayItem(item, on) }) } +
-                            Triple("Timer", timer, onTimer)
+                            Triple("Timer when minimized", timer, onTimer)
                     toggles.chunked(2).forEach { pair ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             pair.forEach { (label, on, change) -> OverlayToggle(label, on, Modifier.weight(1f)) { change(!on) } }
@@ -664,6 +675,7 @@ private fun BasicSettings(
                 if (bike.connected) {
                     Spacer(Modifier.weight(1f))
                     SettingSwitch("Shift buttons on screen", shifters, onShifters)
+                    if (shifters) TileActionButton("Shift button position", { onDialog("shifters") })
                 }
             }
             SettingsTile("Sensors", Modifier.weight(1f).fillMaxHeight(), Color(0xFFFB7185)) {
@@ -681,9 +693,9 @@ private fun BasicSettings(
 }
 
 @Composable
-private fun StatusCheck(modifier: Modifier, ok: Boolean, title: String, detail: String) {
+private fun StatusCheck(modifier: Modifier, ok: Boolean, title: String, detail: String, onClick: (() -> Unit)? = null) {
     val accent = if (ok) Color(0xFF34D399) else Color(0xFFFBBF24)
-    Surface(modifier, color = if (ok) Color(0xFF12301F) else Color(0xFF2A2412),
+    Surface(if (onClick != null) modifier.clickable(onClick = onClick) else modifier, color = if (ok) Color(0xFF12301F) else Color(0xFF2A2412),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = .4f))) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
