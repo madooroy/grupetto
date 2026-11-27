@@ -96,12 +96,12 @@ class OverlaySensorViewModel(
     val rampRateLabel: Flow<String?> = bikeControlState.map {
         if (it.connected && it.mode == com.spop.poverlay.control.ControlMode.Erg) "Ramp ${it.rampRate}/s" else null
     }
-    // Experimental flywheel (brake disc) temperature estimate, shown on the overlay bar while the bike reports power.
+    // Flywheel (brake disc) temperature estimate for the overlay bar's chip, while the bike reports power.
     val flywheelLabel: Flow<String?> = ((application as? com.spop.poverlay.GrupettoApplication)?.grupettoCalibration
         ?.flywheelTemperature?.state ?: kotlinx.coroutines.flow.flowOf(null)).map { state ->
         state?.takeIf { it.receivingPower }?.let {
             val unit = it.displayUnit
-            "Disc ${unit.fromFahrenheit(it.fahrenheit).roundToInt()}${unit.symbol}"
+            "Flywheel ${kotlin.math.round(unit.fromFahrenheit(it.fahrenheit)).toInt()}${unit.symbol}"
         }
     }
     fun cycleRampRate() {

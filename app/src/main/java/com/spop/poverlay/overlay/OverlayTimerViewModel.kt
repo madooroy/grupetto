@@ -24,8 +24,8 @@ open class OverlayTimerViewModel(
 
     val showTimerWhenMinimized
         get() = configurationRepository.showTimerWhenMinimized
-    val showOverlayChart
-        get() = configurationRepository.showOverlayChart
+    val overlayItems
+        get() = configurationRepository.overlayItems
 
     // Accumulated seconds (persists across pause/resume)
     private var accumulatedSeconds = 0L

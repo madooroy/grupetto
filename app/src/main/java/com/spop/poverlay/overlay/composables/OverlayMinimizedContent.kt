@@ -15,10 +15,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -52,6 +52,12 @@ fun OverlayMinimizedContent(
     showCadenceField: Boolean,
     showResistanceField: Boolean,
     showInclineField: Boolean,
+    showSpeedField: Boolean = true,
+    showHeartRateField: Boolean = true,
+    /** The flywheel temperature chip, when switched on in settings and the bike reports power. */
+    flywheelLabel: String? = null,
+    rampLabel: String? = null,
+    onRampTap: () -> Unit = {},
     heartRateColor: Color,
     contentAlpha: Float,
     timerLabel: String,
@@ -63,10 +69,7 @@ fun OverlayMinimizedContent(
     onLayout: (IntSize) -> Unit,
     emulationLabel: String? = null,
     powerComparison: String? = null,
-    powerSourceLabel: String? = null,
-    rampLabel: String? = null,
-    flywheelLabel: String? = null,
-    onRampTap: () -> Unit = {}
+    powerSourceLabel: String? = null
 ) {
     val backgroundShape = if (isMinimized) {
         RoundedCornerShape(8.dp)
@@ -157,7 +160,7 @@ fun OverlayMinimizedContent(
             )
         }
         if (flywheelLabel != null) {
-            // Experimental flywheel temperature estimate (read-only).
+            // Estimate, read-only.
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 flywheelLabel,
@@ -249,17 +252,19 @@ fun OverlayMinimizedContent(
                 if (showInclineField) {
                     inclineField()
                 }
-                speedField()
+                if (showSpeedField) speedField()
             } else {
-                speedField()
+                if (showSpeedField) speedField()
             }
-            Spacer(modifier = Modifier.width(4.dp))
-            OverlayTimerField(
-                modifier = Modifier.width(58.dp),
-                timerLabel = heartRateLabel,
-                iconDrawable = R.drawable.ic_hrm,
-                textColor = heartRateColor
-            )
+            if (showHeartRateField) {
+                Spacer(modifier = Modifier.width(4.dp))
+                OverlayTimerField(
+                    modifier = Modifier.width(58.dp),
+                    timerLabel = heartRateLabel,
+                    iconDrawable = R.drawable.ic_hrm,
+                    textColor = heartRateColor
+                )
+            }
         }
     }
 }

@@ -107,8 +107,8 @@ class ConfigurationViewModel(
 
     val showTimerWhenMinimized
         get() = configurationRepository.showTimerWhenMinimized
-    val showOverlayChart
-        get() = configurationRepository.showOverlayChart
+    val overlayItems get() = configurationRepository.overlayItems
+    fun setOverlayItem(item: OverlayItem, shown: Boolean) = configurationRepository.setOverlayItem(item, shown)
 
     val showShifters get() = configurationRepository.showShifters
     val shifterInset get() = configurationRepository.shifterInset
@@ -336,8 +336,6 @@ class ConfigurationViewModel(
             requestBackgroundLocationPermission.value = Unit
         }
     }
-
-    fun onShowOverlayChartClicked(isChecked: Boolean) = configurationRepository.setShowOverlayChart(isChecked)
 
     fun onShowTimerWhenMinimizedClicked(isChecked: Boolean) {
         configurationRepository.setShowTimerWhenMinimized(isChecked)
