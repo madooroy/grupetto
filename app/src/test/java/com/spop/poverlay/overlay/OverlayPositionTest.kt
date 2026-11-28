@@ -12,7 +12,6 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OverlayPositionTest {
@@ -145,7 +144,7 @@ class OverlayPositionTest {
     }
 
     @Test
-    fun `a mostly vertical drag flips top and bottom and never docks`() {
+    fun `a drag heading for the other edge flips top and bottom and never docks`() {
         val dialog = dialog(-460f)          // parked at the far left of the bottom edge
         var progress = 0f
         repeat(10) {                        // up and a little left, against the edge
@@ -201,7 +200,8 @@ class OverlayPositionTest {
         lower.processSideDrag(200f, 0f)   // 500 px away > 25% of 1920
         assertEquals(OverlayLocation.Bottom, lower.dialogLocation.value)
         assertEquals(0f, lower.dialogOrigin.value.y, 0f)
-        assertTrue(lower.dialogOrigin.value.x < 0f) // arrives at the left end of the bar
+        // Arrives under the finger: 75 px (half the column) + 500 px dragged = 575 px from the left, -385 from centre.
+        assertEquals(-385f, lower.dialogOrigin.value.x, 0.5f)
 
         val upper = dialog(location = OverlayLocation.Right)
         upper.onOverlayLayout(IntSize(150, 400))
