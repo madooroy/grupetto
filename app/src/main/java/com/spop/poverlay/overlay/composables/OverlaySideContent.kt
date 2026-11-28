@@ -149,6 +149,10 @@ fun OverlaySideContent(
     }
 }
 
+/**
+ * One number in the column. Not [OverlayTimerField] (the bar's): that one centres its value in a fixed-width cell
+ * with a header line above; a column reads down a left edge, value beside its icon and the unit under the value.
+ */
 @Composable
 private fun SideField(
     value: String,

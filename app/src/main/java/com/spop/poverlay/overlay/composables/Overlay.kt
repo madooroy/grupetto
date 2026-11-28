@@ -310,7 +310,9 @@ fun Overlay(
                     powerComparison = powerComparison,
                     powerSourceLabel = powerSource,
                     rpm = rpm,
-                    pauseChart = isCurrentlyAnimating,
+                    // Paused only while the slide is actually moving: a docked column has no slide, so the flag set by
+                    // its minimize toggle is never cleared, and the chart would stay frozen after undocking (review).
+                    pauseChart = isCurrentlyAnimating && visibilityOffset != targetVisibilityOffset,
                     currentGraph = currentGraph,
                     selectedMetric = selectedMetric,
                     resistance = resistance,

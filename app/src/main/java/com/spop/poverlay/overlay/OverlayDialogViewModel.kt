@@ -24,8 +24,8 @@ class OverlayDialogViewModel(
         private val HorizontalDragSnapRange = -20f..20f
 
         // Pushing a top/bottom bar this far past the left or right edge docks it there as a column
-        // (a share of the screen width).
-        const val SideDockPushFraction = .04f
+        // (a share of the screen width): a deliberate push, not a finger carrying on past the end of the track.
+        const val SideDockPushFraction = .08f
 
         // Dragging a docked column this far away from its edge puts it back at the top or bottom.
         const val SideUndockDragFraction = .25f
@@ -47,6 +47,10 @@ class OverlayDialogViewModel(
         private set
     private var edgePush = 0f
     private var sideAway = 0f
+    // This drag so far: sideways travel, and the top/bottom flip progress. A drag that is mostly up or down
+    // (moving the bar to the other edge) never docks it at a side, even if it also pushes sideways.
+    private var dragTravelX = 0f
+    private var dragProgressY = 0f
     private var overlayHeightPx = 0
     // Defined as width to height
     val dialogSizeParams = MutableStateFlow(LayoutParams.WRAP_CONTENT to LayoutParams.WRAP_CONTENT)
@@ -95,13 +99,16 @@ class OverlayDialogViewModel(
         val x = if (horizontalDragOffset in HorizontalDragSnapRange) 0f else horizontalDragOffset
         updateOrigin(dialogOrigin, x = x)
 
+        dragTravelX += abs(delta)
         val pastEdge = wanted - horizontalDragOffset
         edgePush = when {
             pastEdge == 0f -> 0f
             edgePush == 0f || (pastEdge < 0f) == (edgePush < 0f) -> edgePush + pastEdge
             else -> pastEdge
         }
-        if (abs(edgePush) > screenSize.width * SideDockPushFraction) {
+        // A bar as wide as the screen has no track to run along: every sideways move would count as a push.
+        val hasTrack = horizontalDragScreenRange.endInclusive > 0f
+        if (hasTrack && dragTravelX > 2 * dragProgressY && abs(edgePush) > screenSize.width * SideDockPushFraction) {
             moveTo(if (edgePush < 0f) OverlayLocation.Left else OverlayLocation.Right)
         }
     }
@@ -129,11 +136,15 @@ class OverlayDialogViewModel(
     fun onDragFinished() {
         edgePush = 0f
         sideAway = 0f
+        dragTravelX = 0f
+        dragProgressY = 0f
     }
 
     private fun moveTo(location: OverlayLocation) {
         edgePush = 0f
         sideAway = 0f
+        dragTravelX = 0f
+        dragProgressY = 0f
         dialogLocation.value = location
         dialogGravity.value = location.gravity
         if (location.isSide) {
@@ -181,6 +192,7 @@ class OverlayDialogViewModel(
     // - Keep the current progress otherwise
     fun processVerticalDrag(distance: Float): Float {
         if (dialogLocation.value.isSide) return 0f
+        dragProgressY = abs(distance)
         if (abs(distance) > screenSize.height * OverlayService.VerticalMoveDragThreshold) {
             moveTo(verticalToggleOverlayLocation(dialogLocation.value))
             return 0f
