@@ -30,6 +30,9 @@ class OverlayDialogViewModel(
         // Dragging a docked column this far away from its edge puts it back at the top or bottom.
         const val SideUndockDragFraction = .25f
 
+        // A drag that has moved this far up or down (a share of the screen height) is on its way to the other edge.
+        const val NoDockVerticalFraction = .25f
+
         // Where a column first docks, below the screen's centre (a share of the screen height): between
         // Peloton's music card and high-five feed (upper left) and its target pills and metrics (bottom).
         const val DefaultSideOffsetFraction = .11f
@@ -47,10 +50,10 @@ class OverlayDialogViewModel(
         private set
     private var edgePush = 0f
     private var sideAway = 0f
-    // This drag so far: sideways travel, and the top/bottom flip progress. A drag that is mostly up or down
-    // (moving the bar to the other edge) never docks it at a side, even if it also pushes sideways.
-    private var dragTravelX = 0f
+    // This drag's top/bottom flip progress: a drag clearly heading for the other edge doesn't dock at a side,
+    // even if it also pushes sideways (a diagonal drag from a corner).
     private var dragProgressY = 0f
+    private var overlayWidthPx = 0
     private var overlayHeightPx = 0
     // Defined as width to height
     val dialogSizeParams = MutableStateFlow(LayoutParams.WRAP_CONTENT to LayoutParams.WRAP_CONTENT)
@@ -99,7 +102,6 @@ class OverlayDialogViewModel(
         val x = if (horizontalDragOffset in HorizontalDragSnapRange) 0f else horizontalDragOffset
         updateOrigin(dialogOrigin, x = x)
 
-        dragTravelX += abs(delta)
         val pastEdge = wanted - horizontalDragOffset
         edgePush = when {
             pastEdge == 0f -> 0f
@@ -108,7 +110,8 @@ class OverlayDialogViewModel(
         }
         // A bar as wide as the screen has no track to run along: every sideways move would count as a push.
         val hasTrack = horizontalDragScreenRange.endInclusive > 0f
-        if (hasTrack && dragTravelX > 2 * dragProgressY && abs(edgePush) > screenSize.width * SideDockPushFraction) {
+        val headingForOtherEdge = dragProgressY > screenSize.height * NoDockVerticalFraction
+        if (hasTrack && !headingForOtherEdge && abs(edgePush) > screenSize.width * SideDockPushFraction) {
             moveTo(if (edgePush < 0f) OverlayLocation.Left else OverlayLocation.Right)
         }
     }
@@ -125,10 +128,13 @@ class OverlayDialogViewModel(
         sideAway = (sideAway + away).coerceAtLeast(0f)
         if (sideAway > screenSize.width * SideUndockDragFraction) {
             val bar = if (sideOffset < 0f) OverlayLocation.Top else OverlayLocation.Bottom
+            // The bar arrives centred under the finger (about half a column in from the edge, plus the drag away),
+            // so the rest of its track is still ahead for a drag that carries on to the other side.
+            val fingerX = overlayWidthPx / 2f + sideAway
+            val fromCentre = if (location == OverlayLocation.Left) fingerX - screenSize.width / 2f
+            else screenSize.width / 2f - fingerX
             moveTo(bar)
-            // Arrive at the end of the bar nearest the edge it came from.
-            horizontalDragOffset = if (location == OverlayLocation.Left) horizontalDragScreenRange.start
-            else horizontalDragScreenRange.endInclusive
+            horizontalDragOffset = fromCentre.coerceIn(horizontalDragScreenRange)
             updateOrigin(dialogOrigin, x = horizontalDragOffset, y = 0f)
         }
     }
@@ -136,14 +142,11 @@ class OverlayDialogViewModel(
     fun onDragFinished() {
         edgePush = 0f
         sideAway = 0f
-        dragTravelX = 0f
         dragProgressY = 0f
     }
 
     private fun moveTo(location: OverlayLocation) {
         edgePush = 0f
-        sideAway = 0f
-        dragTravelX = 0f
         dragProgressY = 0f
         dialogLocation.value = location
         dialogGravity.value = location.gravity
@@ -162,6 +165,7 @@ class OverlayDialogViewModel(
         val (_, currentHeight) = dialogSizeParams.value
         dialogSizeParams.value = size.width to currentHeight
         overlayHeightPx = size.height
+        overlayWidthPx = size.width
         if (dialogLocation.value.isSide) {
             // Keep a docked column on screen when it grows (expanded) or the display changes.
             sideOffset = sideOffset.coerceIn(sideDragScreenRange())

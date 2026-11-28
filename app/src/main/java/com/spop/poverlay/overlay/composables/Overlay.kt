@@ -49,7 +49,7 @@ import timber.log.Timber
 const val VisibilityChangeDurationMs = 150
 // After the overlay changes shape mid-drag (bar to side column or back), drag readings are ignored this long
 // while its window moves to the new edge.
-const val ShapeChangeSettleMs = 250L
+const val ShapeChangeSettleMs = 120L
 val OverlayCornerRadius = 25.dp
 val StatCardWidth = 105.dp
 val PowerChartFullWidth = 200.dp
