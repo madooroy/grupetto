@@ -52,8 +52,8 @@ class OverlayPositionTest {
         return ConfigurationRepository(context, owner)
     }
 
-    private fun dialog(offset: Float = 0f, location: OverlayLocation = OverlayLocation.Bottom) =
-        OverlayDialogViewModel(Size(1920f, 1080f), MutableStateFlow(false), offset, location)
+    private fun dialog(offset: Float = 0f, location: OverlayLocation = OverlayLocation.Bottom, side: Float? = 0f) =
+        OverlayDialogViewModel(Size(1920f, 1080f), MutableStateFlow(false), offset, location, side)
             .also { it.onOverlayLayout(IntSize(1000, 110)) }
 
     @Test
@@ -137,6 +137,14 @@ class OverlayPositionTest {
     }
 
     @Test
+    fun `the first dock lands below the centre, clear of Peloton's feed`() {
+        val dialog = dialog(side = null)
+        dialog.processHorizontalDrag(-600f)
+        assertEquals(OverlayLocation.Left, dialog.dialogLocation.value)
+        assertEquals(Offset(0f, 1080f * OverlayDialogViewModel.DefaultSideOffsetFraction), dialog.dialogOrigin.value)
+    }
+
+    @Test
     fun `easing off the edge between pushes does not dock`() {
         val dialog = dialog()
         dialog.processHorizontalDrag(460f)
@@ -188,7 +196,7 @@ class OverlayPositionTest {
         repository().use { config ->
             val dialog = dialog()
             dialog.processHorizontalDrag(-250f)
-            config.setOverlayPosition(dialog.dialogOrigin.value.x, dialog.dialogLocation.value, dialog.sideOffset)
+            config.setOverlayPosition(dialog.dialogOrigin.value.x, dialog.dialogLocation.value)
             dialog.processHorizontalDrag(-300f)
             dialog.processHorizontalDrag(-100f)
             dialog.onOverlayLayout(IntSize(150, 400))
@@ -198,7 +206,7 @@ class OverlayPositionTest {
         repository().use { config ->
             assertEquals(OverlayLocation.Left, config.overlayLocation)
             assertEquals(-250f, config.overlayHorizontalOffset, 0f)
-            assertEquals(120f, config.overlaySideOffset, 0f)
+            assertEquals(120f, config.overlaySideOffset!!, 0f)
             val restored = OverlayDialogViewModel(Size(1920f, 1080f), MutableStateFlow(false),
                 config.overlayHorizontalOffset, config.overlayLocation, config.overlaySideOffset)
             assertEquals(Offset(0f, 120f), restored.dialogOrigin.value)

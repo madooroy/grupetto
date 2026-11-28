@@ -276,7 +276,7 @@ class OverlayService : LifecycleEnabledService() {
                         configurationRepository.setOverlayPosition(
                             dialogViewModel.dialogOrigin.value.x,
                             dialogViewModel.dialogLocation.value,
-                            dialogViewModel.sideOffset
+                            dialogViewModel.sideOffset.takeIf { dialogViewModel.dialogLocation.value.isSide }
                         )
                     },
                     sideDragCallback = dialogViewModel::processSideDrag

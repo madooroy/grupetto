@@ -155,17 +155,17 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
             it.name == sharedPreferences.getString(Preferences.OverlayLocation.key, null)
         } ?: OverlayLocation.Bottom
 
-    /** Where a column docked at the left or right edge sits, from the screen's vertical centre (px). */
-    val overlaySideOffset: Float
-        get() = sharedPreferences.getFloat(Preferences.OverlaySideOffset.key, 0f)
-            .takeIf { it.isFinite() } ?: 0f
+    /** Where a column docked at the left or right edge sits, from the screen's vertical centre (px); null until docked once. */
+    val overlaySideOffset: Float?
+        get() = sharedPreferences.getFloat(Preferences.OverlaySideOffset.key, Float.NaN)
+            .takeIf { it.isFinite() }
 
-    fun setOverlayPosition(horizontalOffset: Float, location: OverlayLocation, sideOffset: Float = overlaySideOffset) {
+    fun setOverlayPosition(horizontalOffset: Float, location: OverlayLocation, sideOffset: Float? = null) {
         sharedPreferences.edit {
             // A docked column keeps the bar's last horizontal place for when it goes back to the top or bottom.
             if (!location.isSide) putFloat(Preferences.OverlayHorizontalOffset.key, horizontalOffset)
             putString(Preferences.OverlayLocation.key, location.name)
-            putFloat(Preferences.OverlaySideOffset.key, sideOffset)
+            if (sideOffset != null) putFloat(Preferences.OverlaySideOffset.key, sideOffset)
         }
     }
 

@@ -16,7 +16,7 @@ class OverlayDialogViewModel(
     private val isMinimized : StateFlow<Boolean>,
     initialHorizontalOffset: Float = 0f,
     initialLocation: OverlayLocation = OverlayLocation.Bottom,
-    initialSideOffset: Float = 0f
+    savedSideOffset: Float? = null
     ) {
     companion object {
         // If the overlay is dragged within this range of pixels from the center of the screen
@@ -29,7 +29,13 @@ class OverlayDialogViewModel(
 
         // Dragging a docked column this far away from its edge puts it back at the top or bottom.
         const val SideUndockDragFraction = .25f
+
+        // Where a column first docks, below the screen's centre (a share of the screen height): between
+        // Peloton's music card and high-five feed (upper left) and its target pills and metrics (bottom).
+        const val DefaultSideOffsetFraction = .11f
     }
+
+    private val initialSideOffset = savedSideOffset ?: (screenSize.height * DefaultSideOffsetFraction)
 
     val dialogOrigin = MutableStateFlow(
         if (initialLocation.isSide) Offset(0f, initialSideOffset) else Offset(initialHorizontalOffset, 0f)
