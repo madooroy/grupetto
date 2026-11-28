@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
@@ -54,8 +55,8 @@ fun OverlayMinimizedContent(
     showInclineField: Boolean,
     showSpeedField: Boolean = true,
     showHeartRateField: Boolean = true,
-    /** The flywheel temperature chip, when switched on in settings and the bike reports power. */
-    flywheelLabel: String? = null,
+    /** The flywheel temperature chip's text, when switched on in settings (null text: the bike isn't reporting power). */
+    flywheelLabel: kotlinx.coroutines.flow.Flow<String?>? = null,
     rampLabel: String? = null,
     onRampTap: () -> Unit = {},
     heartRateColor: Color,
@@ -159,18 +160,7 @@ fun OverlayMinimizedContent(
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
-        if (flywheelLabel != null) {
-            // Estimate, read-only.
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                flywheelLabel,
-                color = Color(0xFFFFC078),
-                fontSize = 13.sp,
-                modifier = Modifier
-                    .background(Color(0x40845A2B), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            )
-        }
+        if (flywheelLabel != null) FlywheelChip(flywheelLabel)
         Spacer(modifier = Modifier.width(6.dp))
         Icon(
             imageVector = Icons.Filled.Settings,
@@ -306,4 +296,19 @@ private fun OverlayTimerField(
     if (headerLabel != null) Text(headerLabel, color = Color.White, fontSize = 11.sp, maxLines = 1)
     if (secondaryLabel != null) Text(secondaryLabel, color = Color.LightGray, fontSize = 11.sp, maxLines = 1)
     }
+}
+
+/** Estimate, read-only. Collects its own flow so a temperature change redraws the chip alone. */
+@Composable
+private fun FlywheelChip(label: kotlinx.coroutines.flow.Flow<String?>) {
+    val text = label.collectAsState(initial = null).value ?: return
+    Spacer(modifier = Modifier.width(6.dp))
+    Text(
+        text,
+        color = Color(0xFFFFC078),
+        fontSize = 13.sp,
+        modifier = Modifier
+            .background(Color(0x40845A2B), RoundedCornerShape(6.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    )
 }
