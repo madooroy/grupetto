@@ -47,6 +47,9 @@ import kotlinx.coroutines.flow.onEach
 import timber.log.Timber
 
 const val VisibilityChangeDurationMs = 150
+// After the overlay changes shape mid-drag (bar to side column or back), drag readings are ignored this long
+// while its window moves to the new edge.
+const val ShapeChangeSettleMs = 250L
 val OverlayCornerRadius = 25.dp
 val StatCardWidth = 105.dp
 val PowerChartFullWidth = 200.dp
@@ -371,14 +374,20 @@ fun Overlay(
     val currentLocation by rememberUpdatedState(location)
     var dragLocation by remember { mutableStateOf(location) }
     val dragModifier = Modifier.pointerInput(Unit) {
+        var settleUntil = 0L
         detectDragGestures(onDrag = { change, offset ->
             val now = currentLocation
             if (now != dragLocation) {
-                // Changed shape mid-drag: start the top/bottom flip distance over.
+                // Changed shape mid-drag. The window jumps to its new edge while the finger stays put, so the next
+                // readings carry a jump the rider never made (it flipped the bar top/bottom, or blocked docking).
+                // Ignore them until the window has settled, then start the top/bottom flip distance over.
                 dragLocation = now
-                verticalDragOffset = 0f
+                settleUntil = change.uptimeMillis + ShapeChangeSettleMs
             }
-            if (now.isSide) {
+            if (change.uptimeMillis < settleUntil) {
+                change.consume()
+                verticalDragOffset = 0f
+            } else if (now.isSide) {
                 change.consume()
                 sideDragCallback(offset.x, offset.y)
             } else {
