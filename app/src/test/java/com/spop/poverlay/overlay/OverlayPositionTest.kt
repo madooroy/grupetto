@@ -12,6 +12,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OverlayPositionTest {
@@ -120,6 +121,88 @@ class OverlayPositionTest {
         repository().use { config ->
             assertEquals(0f, config.overlayHorizontalOffset, 0f)
             assertEquals(OverlayLocation.Bottom, config.overlayLocation)
+        }
+    }
+
+    @Test
+    fun `pushing the bar past a side edge docks it there as a column`() {
+        val dialog = dialog()
+        dialog.processHorizontalDrag(-460f) // at the left edge
+        dialog.processHorizontalDrag(-50f)  // pushed a little: still a bar
+        assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
+        dialog.processHorizontalDrag(-40f)  // past 4% of the screen width
+        assertEquals(OverlayLocation.Left, dialog.dialogLocation.value)
+        assertEquals(OverlayLocation.Left.gravity, dialog.dialogGravity.value)
+        assertEquals(Offset.Zero, dialog.dialogOrigin.value)
+    }
+
+    @Test
+    fun `easing off the edge between pushes does not dock`() {
+        val dialog = dialog()
+        dialog.processHorizontalDrag(460f)
+        dialog.processHorizontalDrag(60f)
+        dialog.processHorizontalDrag(-10f) // back inside: the push starts over
+        dialog.processHorizontalDrag(10f)
+        dialog.processHorizontalDrag(60f)
+        assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
+        dialog.processHorizontalDrag(30f)
+        assertEquals(OverlayLocation.Right, dialog.dialogLocation.value)
+    }
+
+    @Test
+    fun `a docked column slides along its edge and stays on screen`() {
+        val dialog = dialog(location = OverlayLocation.Left)
+        dialog.onOverlayLayout(IntSize(150, 400))
+        dialog.processSideDrag(0f, -200f)
+        assertEquals(Offset(0f, -200f), dialog.dialogOrigin.value)
+        dialog.processSideDrag(0f, 900f)
+        assertEquals(Offset(0f, 340f), dialog.dialogOrigin.value) // (1080 - 400) / 2
+        assertEquals(0f, dialog.processVerticalDrag(900f), 0f)    // the top/bottom flip doesn't apply
+        assertEquals(OverlayLocation.Left, dialog.dialogLocation.value)
+    }
+
+    @Test
+    fun `dragging a column away from its edge puts it back at the top or bottom`() {
+        val lower = dialog()
+        lower.processHorizontalDrag(-600f)
+        lower.processHorizontalDrag(-100f)
+        lower.onOverlayLayout(IntSize(150, 400))
+        lower.processSideDrag(0f, 150f)
+        lower.processSideDrag(-300f, 0f)  // toward the edge: ignored
+        lower.processSideDrag(300f, 0f)
+        assertEquals(OverlayLocation.Left, lower.dialogLocation.value)
+        lower.processSideDrag(200f, 0f)   // 500 px away > 25% of 1920
+        assertEquals(OverlayLocation.Bottom, lower.dialogLocation.value)
+        assertEquals(0f, lower.dialogOrigin.value.y, 0f)
+        assertTrue(lower.dialogOrigin.value.x < 0f) // arrives at the left end of the bar
+
+        val upper = dialog(location = OverlayLocation.Right)
+        upper.onOverlayLayout(IntSize(150, 400))
+        upper.processSideDrag(0f, -100f)
+        upper.processSideDrag(-500f, 0f)
+        assertEquals(OverlayLocation.Top, upper.dialogLocation.value)
+    }
+
+    @Test
+    fun `docked side and place survive a restart, and the bar keeps its own place`() {
+        repository().use { config ->
+            val dialog = dialog()
+            dialog.processHorizontalDrag(-250f)
+            config.setOverlayPosition(dialog.dialogOrigin.value.x, dialog.dialogLocation.value, dialog.sideOffset)
+            dialog.processHorizontalDrag(-300f)
+            dialog.processHorizontalDrag(-100f)
+            dialog.onOverlayLayout(IntSize(150, 400))
+            dialog.processSideDrag(0f, 120f)
+            config.setOverlayPosition(dialog.dialogOrigin.value.x, dialog.dialogLocation.value, dialog.sideOffset)
+        }
+        repository().use { config ->
+            assertEquals(OverlayLocation.Left, config.overlayLocation)
+            assertEquals(-250f, config.overlayHorizontalOffset, 0f)
+            assertEquals(120f, config.overlaySideOffset, 0f)
+            val restored = OverlayDialogViewModel(Size(1920f, 1080f), MutableStateFlow(false),
+                config.overlayHorizontalOffset, config.overlayLocation, config.overlaySideOffset)
+            assertEquals(Offset(0f, 120f), restored.dialogOrigin.value)
+            assertEquals(OverlayLocation.Left.gravity, restored.dialogGravity.value)
         }
     }
 

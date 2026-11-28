@@ -196,7 +196,8 @@ class OverlayService : LifecycleEnabledService() {
             screenSize,
             sensorViewModel.isMinimized,
             configurationRepository.overlayHorizontalOffset,
-            configurationRepository.overlayLocation
+            configurationRepository.overlayLocation,
+            configurationRepository.overlaySideOffset
         )
 
         // Initialize and start watchdog (always enabled)
@@ -271,11 +272,14 @@ class OverlayService : LifecycleEnabledService() {
                     dialogViewModel::onOverlayLayout,
                     dialogViewModel::onTimerOverlayLayout,
                     onDragFinished = {
+                        dialogViewModel.onDragFinished()
                         configurationRepository.setOverlayPosition(
                             dialogViewModel.dialogOrigin.value.x,
-                            dialogViewModel.dialogLocation.value
+                            dialogViewModel.dialogLocation.value,
+                            dialogViewModel.sideOffset
                         )
-                    }
+                    },
+                    sideDragCallback = dialogViewModel::processSideDrag
                 )
             }
             alpha = 1f

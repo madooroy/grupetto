@@ -75,6 +75,8 @@ fun OverlayMinimizedContent(
         when (location) {
             OverlayLocation.Top -> RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
             OverlayLocation.Bottom -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+            // A docked column draws OverlaySideContent instead of this bar.
+            OverlayLocation.Left, OverlayLocation.Right -> RoundedCornerShape(8.dp)
         }
     }
     val expandedVerticalPadding = if (isMinimized) {
@@ -144,13 +146,13 @@ fun OverlayMinimizedContent(
         Icon(
             imageVector = if (isMinimized) {
                 when (location) {
-                    OverlayLocation.Top -> Icons.Filled.KeyboardArrowDown
                     OverlayLocation.Bottom -> Icons.Filled.KeyboardArrowUp
+                    else -> Icons.Filled.KeyboardArrowDown
                 }
             } else {
                 when (location) {
-                    OverlayLocation.Top -> Icons.Filled.KeyboardArrowUp
                     OverlayLocation.Bottom -> Icons.Filled.KeyboardArrowDown
+                    else -> Icons.Filled.KeyboardArrowUp
                 }
             },
             contentDescription = if (isMinimized) "Expand" else "Minimize",
@@ -268,9 +270,9 @@ private fun OverlayTimerField(
 
 /** Estimate, read-only. Collects its own flow so a temperature change redraws the chip alone. */
 @Composable
-private fun FlywheelChip(label: kotlinx.coroutines.flow.Flow<String?>) {
+internal fun FlywheelChip(label: kotlinx.coroutines.flow.Flow<String?>, leadingSpace: Boolean = true) {
     val text = label.collectAsState(initial = null).value ?: return
-    Spacer(modifier = Modifier.width(6.dp))
+    if (leadingSpace) Spacer(modifier = Modifier.width(6.dp))
     Text(
         text,
         color = Color(0xFFFFC078),

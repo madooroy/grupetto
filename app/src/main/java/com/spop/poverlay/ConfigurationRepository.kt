@@ -22,6 +22,7 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
         BleFtmsDeviceName("bleFtmsDeviceName"),
         OverlayHorizontalOffset("overlayHorizontalOffset"),
         OverlayLocation("overlayLocation"),
+        OverlaySideOffset("overlaySideOffset"),
         AntPlusTxEnabled("antPlusTxEnabled"),
         AutoStartOnBoot("autoStartOnBoot"),
         SerialNumber("serialNumber")
@@ -154,10 +155,17 @@ class ConfigurationRepository(context: Context, lifecycleOwner: LifecycleOwner, 
             it.name == sharedPreferences.getString(Preferences.OverlayLocation.key, null)
         } ?: OverlayLocation.Bottom
 
-    fun setOverlayPosition(horizontalOffset: Float, location: OverlayLocation) {
+    /** Where a column docked at the left or right edge sits, from the screen's vertical centre (px). */
+    val overlaySideOffset: Float
+        get() = sharedPreferences.getFloat(Preferences.OverlaySideOffset.key, 0f)
+            .takeIf { it.isFinite() } ?: 0f
+
+    fun setOverlayPosition(horizontalOffset: Float, location: OverlayLocation, sideOffset: Float = overlaySideOffset) {
         sharedPreferences.edit {
-            putFloat(Preferences.OverlayHorizontalOffset.key, horizontalOffset)
+            // A docked column keeps the bar's last horizontal place for when it goes back to the top or bottom.
+            if (!location.isSide) putFloat(Preferences.OverlayHorizontalOffset.key, horizontalOffset)
             putString(Preferences.OverlayLocation.key, location.name)
+            putFloat(Preferences.OverlaySideOffset.key, sideOffset)
         }
     }
 
