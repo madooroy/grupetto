@@ -30,9 +30,6 @@ class OverlayDialogViewModel(
         // Dragging a docked column this far away from its edge puts it back at the top or bottom.
         const val SideUndockDragFraction = .25f
 
-        // A drag that has moved this far up or down (a share of the screen height) is on its way to the other edge.
-        const val NoDockVerticalFraction = .25f
-
         // Where a column first docks, below the screen's centre (a share of the screen height): between
         // Peloton's music card and high-five feed (upper left) and its target pills and metrics (bottom).
         const val DefaultSideOffsetFraction = .11f
@@ -50,9 +47,6 @@ class OverlayDialogViewModel(
         private set
     private var edgePush = 0f
     private var sideAway = 0f
-    // This drag's top/bottom flip progress: a drag clearly heading for the other edge doesn't dock at a side,
-    // even if it also pushes sideways (a diagonal drag from a corner).
-    private var dragProgressY = 0f
     private var overlayWidthPx = 0
     private var overlayHeightPx = 0
     // Defined as width to height
@@ -110,8 +104,7 @@ class OverlayDialogViewModel(
         }
         // A bar as wide as the screen has no track to run along: every sideways move would count as a push.
         val hasTrack = horizontalDragScreenRange.endInclusive > 0f
-        val headingForOtherEdge = dragProgressY > screenSize.height * NoDockVerticalFraction
-        if (hasTrack && !headingForOtherEdge && abs(edgePush) > screenSize.width * SideDockPushFraction) {
+        if (hasTrack && abs(edgePush) > screenSize.width * SideDockPushFraction) {
             moveTo(if (edgePush < 0f) OverlayLocation.Left else OverlayLocation.Right)
         }
     }
@@ -142,12 +135,11 @@ class OverlayDialogViewModel(
     fun onDragFinished() {
         edgePush = 0f
         sideAway = 0f
-        dragProgressY = 0f
     }
 
     private fun moveTo(location: OverlayLocation) {
         edgePush = 0f
-        dragProgressY = 0f
+        sideAway = 0f   // a new shape starts its own count (a column docked after an undock must not undock at once)
         dialogLocation.value = location
         dialogGravity.value = location.gravity
         if (location.isSide) {
@@ -196,7 +188,6 @@ class OverlayDialogViewModel(
     // - Keep the current progress otherwise
     fun processVerticalDrag(distance: Float): Float {
         if (dialogLocation.value.isSide) return 0f
-        dragProgressY = abs(distance)
         if (abs(distance) > screenSize.height * OverlayService.VerticalMoveDragThreshold) {
             moveTo(verticalToggleOverlayLocation(dialogLocation.value))
             return 0f
