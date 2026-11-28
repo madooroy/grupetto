@@ -15,16 +15,33 @@ class OverlayDialogViewModel(
     private val screenSize: Size,
     private val isMinimized : StateFlow<Boolean>,
     initialHorizontalOffset: Float = 0f,
-    initialLocation: OverlayLocation = OverlayLocation.Bottom
+    initialLocation: OverlayLocation = OverlayLocation.Bottom,
+    initialSideOffset: Float = 0f
     ) {
     companion object {
         // If the overlay is dragged within this range of pixels from the center of the screen
         // snap to the center of the screen instead
         private val HorizontalDragSnapRange = -20f..20f
+
+        // Pushing a top/bottom bar this far past the left or right edge docks it there as a column
+        // (a share of the screen width).
+        const val SideDockPushFraction = .04f
+
+        // Dragging a docked column this far away from its edge puts it back at the top or bottom.
+        const val SideUndockDragFraction = .25f
     }
 
-    val dialogOrigin = MutableStateFlow(Offset(initialHorizontalOffset, 0f))
-    private var horizontalDragOffset = initialHorizontalOffset
+    val dialogOrigin = MutableStateFlow(
+        if (initialLocation.isSide) Offset(0f, initialSideOffset) else Offset(initialHorizontalOffset, 0f)
+    )
+    private var horizontalDragOffset = if (initialLocation.isSide) 0f else initialHorizontalOffset
+    // Position along the side edge, relative to the screen's vertical centre (kept while docked at the top
+    // or bottom so the column comes back where the rider left it).
+    var sideOffset = initialSideOffset
+        private set
+    private var edgePush = 0f
+    private var sideAway = 0f
+    private var overlayHeightPx = 0
     // Defined as width to height
     val dialogSizeParams = MutableStateFlow(LayoutParams.WRAP_CONTENT to LayoutParams.WRAP_CONTENT)
     val minimizedDialogSizeParams = MutableStateFlow(LayoutParams.WRAP_CONTENT to LayoutParams.WRAP_CONTENT)
@@ -64,15 +81,77 @@ class OverlayDialogViewModel(
     // - If the gesture is near the center of the screen, keep view at 0 (allows snapping to center)
     // - If the gesture is on screen, move the view to follow the gesture
     // - If the gesture would move the view offscreen, clamp it to screen bounds
+    // - Kept pushing against the left or right edge, dock there as a column
     fun processHorizontalDrag(delta: Float) {
-        horizontalDragOffset = (horizontalDragOffset + delta).coerceIn(horizontalDragScreenRange)
+        if (dialogLocation.value.isSide) return
+        val wanted = horizontalDragOffset + delta
+        horizontalDragOffset = wanted.coerceIn(horizontalDragScreenRange)
         val x = if (horizontalDragOffset in HorizontalDragSnapRange) 0f else horizontalDragOffset
         updateOrigin(dialogOrigin, x = x)
+
+        val pastEdge = wanted - horizontalDragOffset
+        edgePush = when {
+            pastEdge == 0f -> 0f
+            edgePush == 0f || (pastEdge < 0f) == (edgePush < 0f) -> edgePush + pastEdge
+            else -> pastEdge
+        }
+        if (abs(edgePush) > screenSize.width * SideDockPushFraction) {
+            moveTo(if (edgePush < 0f) OverlayLocation.Left else OverlayLocation.Right)
+        }
     }
+
+    // A docked column: slides along its edge, and goes back to the top or bottom
+    // (whichever half it is in) when dragged well away from the edge.
+    fun processSideDrag(deltaX: Float, deltaY: Float) {
+        val location = dialogLocation.value
+        if (!location.isSide) return
+        sideOffset = (sideOffset + deltaY).coerceIn(sideDragScreenRange())
+        updateOrigin(dialogOrigin, x = 0f, y = sideOffset)
+
+        val away = if (location == OverlayLocation.Left) deltaX else -deltaX
+        sideAway = (sideAway + away).coerceAtLeast(0f)
+        if (sideAway > screenSize.width * SideUndockDragFraction) {
+            val bar = if (sideOffset < 0f) OverlayLocation.Top else OverlayLocation.Bottom
+            moveTo(bar)
+            // Arrive at the end of the bar nearest the edge it came from.
+            horizontalDragOffset = if (location == OverlayLocation.Left) horizontalDragScreenRange.start
+            else horizontalDragScreenRange.endInclusive
+            updateOrigin(dialogOrigin, x = horizontalDragOffset, y = 0f)
+        }
+    }
+
+    fun onDragFinished() {
+        edgePush = 0f
+        sideAway = 0f
+    }
+
+    private fun moveTo(location: OverlayLocation) {
+        edgePush = 0f
+        sideAway = 0f
+        dialogLocation.value = location
+        dialogGravity.value = location.gravity
+        if (location.isSide) {
+            sideOffset = sideOffset.coerceIn(sideDragScreenRange())
+            updateOrigin(dialogOrigin, x = 0f, y = sideOffset)
+        }
+    }
+
+    private fun sideDragScreenRange(): ClosedFloatingPointRange<Float> {
+        val range = ((screenSize.height - overlayHeightPx) / 2f).coerceAtLeast(0f)
+        return -range..range
+    }
+
     fun onOverlayLayout(size : IntSize){
         val (_, currentHeight) = dialogSizeParams.value
         dialogSizeParams.value = size.width to currentHeight
-        updateHorizontalDragScreenRange()
+        overlayHeightPx = size.height
+        if (dialogLocation.value.isSide) {
+            // Keep a docked column on screen when it grows (expanded) or the display changes.
+            sideOffset = sideOffset.coerceIn(sideDragScreenRange())
+            updateOrigin(dialogOrigin, x = 0f, y = sideOffset)
+        } else {
+            updateHorizontalDragScreenRange()
+        }
     }
 
     fun onTimerOverlayLayout(size : IntSize){
@@ -83,6 +162,7 @@ class OverlayDialogViewModel(
     private var horizontalDragScreenRange = calculateHorizontalDragScreenRange(0)
 
     private fun updateHorizontalDragScreenRange() {
+        if (dialogLocation.value.isSide) return
         val width = maxOf(dialogSizeParams.value.first, minimizedDialogSizeParams.value.first, 0)
         horizontalDragScreenRange = calculateHorizontalDragScreenRange(width)
         horizontalDragOffset = horizontalDragOffset.coerceIn(horizontalDragScreenRange)
@@ -94,10 +174,9 @@ class OverlayDialogViewModel(
     // - Reset the progress to 0 and move the view once drag is halfway across screen
     // - Keep the current progress otherwise
     fun processVerticalDrag(distance: Float): Float {
+        if (dialogLocation.value.isSide) return 0f
         if (abs(distance) > screenSize.height * OverlayService.VerticalMoveDragThreshold) {
-            val newLocation = verticalToggleOverlayLocation(dialogLocation.value)
-            dialogLocation.value = newLocation
-            dialogGravity.value = newLocation.gravity
+            moveTo(verticalToggleOverlayLocation(dialogLocation.value))
             return 0f
         } else {
             return distance // Continue drag gesture

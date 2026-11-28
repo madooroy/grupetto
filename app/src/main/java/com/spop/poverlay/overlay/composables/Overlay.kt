@@ -30,6 +30,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import com.spop.poverlay.overlay.composables.OverlayMainContent
 import com.spop.poverlay.overlay.composables.OverlayMinimizedContent
+import com.spop.poverlay.overlay.composables.OverlaySideContent
 import com.spop.poverlay.sensor.heartrate.HeartRateManager
 import androidx.compose.ui.graphics.toArgb
 import com.spop.poverlay.ui.theme.HrZone1Color
@@ -74,7 +75,8 @@ fun Overlay(
     offsetCallback: (Float, Float) -> Unit,
     onLayout: (IntSize) -> Unit,
     onTimerLayout: (IntSize) -> Unit,
-    onDragFinished: () -> Unit
+    onDragFinished: () -> Unit,
+    sideDragCallback: (Float, Float) -> Unit = { _, _ -> }
 ) {
     val displayedPower by sensorViewModel.powerDisplay.collectAsState()
     val power = remember(displayedPower.watts) {
@@ -189,6 +191,8 @@ fun Overlay(
             // When the main content is hidden, move it off screen completely
             OverlayLocation.Top -> IntOffset(0, -mainContentHeight)
             OverlayLocation.Bottom -> IntOffset(0, mainContentHeight)
+            // A docked column swaps its content in place: nothing slides off screen.
+            OverlayLocation.Left, OverlayLocation.Right -> IntOffset.Zero
         }
     } else {
         IntOffset.Zero
@@ -201,7 +205,8 @@ fun Overlay(
         }
     )
 
-    offsetCallback(visibilityOffset.y.toFloat(), size.value.height.toFloat())
+    // A docked column never hides behind a touch target, so it always reports nothing hidden.
+    offsetCallback(if (location.isSide) 0f else visibilityOffset.y.toFloat(), size.value.height.toFloat())
 
     var verticalDragOffset by remember { mutableStateOf(0f) }
 
@@ -212,6 +217,7 @@ fun Overlay(
         OverlayLocation.Bottom -> RoundedCornerShape(
             topStart = OverlayCornerRadius, topEnd = OverlayCornerRadius
         )
+        OverlayLocation.Left, OverlayLocation.Right -> RoundedCornerShape(OverlayCornerRadius)
     }
     val timer = @Composable {
         val showTimerWhenMinimizedFlow = remember {
@@ -305,8 +311,8 @@ fun Overlay(
 
 
                 val rowAlignment = when (location) {
-                    OverlayLocation.Top -> Alignment.Top
                     OverlayLocation.Bottom -> Alignment.Bottom
+                    else -> Alignment.Top
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -396,6 +402,50 @@ fun Overlay(
             }
             return@Box
         }
+        if (location.isSide) {
+            val showTimerWhenMinimized by timerViewModel.showTimerWhenMinimized.collectAsState(initial = true)
+            OverlaySideContent(
+                location = location,
+                isMinimized = minimized,
+                showTimerWhenMinimized = showTimerWhenMinimized,
+                contentAlpha = timerAlpha,
+                isTread = isTread,
+                timerLabel = timerLabel,
+                timerPaused = isTimerPaused,
+                powerLabel = power,
+                powerSourceLabel = if (displayedPower.source == com.spop.poverlay.sensor.power.DisplayPowerSource.Corrected) powerSource else null,
+                cadenceLabel = rpm,
+                resistanceLabel = resistance,
+                inclineLabel = incline,
+                speedLabel = speed,
+                speedUnit = speedLabel,
+                heartRateLabel = heartRate?.toString() ?: SensorValuePlaceholderText,
+                heartRateColor = heartRateColor,
+                caloriesLabel = calories,
+                showPowerField = showPowerCard,
+                showCadenceField = showCadenceCard,
+                showResistanceField = showResistanceCard,
+                showInclineField = showInclineCard,
+                showSpeedField = showSpeed,
+                showHeartRateField = showHeartRate,
+                showCaloriesField = showCalories,
+                flywheelLabel = flywheelLabel,
+                emulationLabel = sensorViewModel.emulatedModel,
+                onTimerTap = { timerViewModel.onTimerTap() },
+                onTimerLongPress = { timerViewModel.onTimerLongPress() },
+                onOpenSettings = { sensorViewModel.onOverlayDoubleTap() },
+                onMinimizeToggle = { sensorViewModel.onOverlayPressed() },
+                onDrag = sideDragCallback,
+                onDragFinished = onDragFinished,
+                onLayout = {
+                    if (it != size.value) {
+                        size.value = it
+                        onLayout(it)
+                    }
+                },
+            )
+            return@Box
+        }
         Column(
             modifier = Modifier
                 .wrapContentSize()
@@ -404,15 +454,14 @@ fun Overlay(
         ) {
 
             when (location) {
-                OverlayLocation.Top -> {
-                    mainContent()
-
-                    timer()
-                }
                 OverlayLocation.Bottom -> {
                     timer()
                     mainContent()
+                }
+                else -> {
+                    mainContent()
 
+                    timer()
                 }
             }
         }
