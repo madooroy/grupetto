@@ -189,6 +189,13 @@ class OverlayService : LifecycleEnabledService() {
             this.coroutineContext,
         )
         this.sensorViewModel = sensorViewModel
+        // Started from the settings screen (Start overlay): the screen was already showing when it asked overlays to
+        // minimize, so this one starts minimized too, instead of opening over the settings header and its buttons.
+        // Leaving settings opens it up, as for an overlay that was already running.
+        if (configurationVisible.value) {
+            minimizedStateBeforeConfiguration = false
+            sensorViewModel.minimizeOverlay()
+        }
         // Wire up timer to auto-start/pause based on movement
         timerViewModel.observeMovement(sensorViewModel.isMoving, sensorViewModel.sessionReset)
 
