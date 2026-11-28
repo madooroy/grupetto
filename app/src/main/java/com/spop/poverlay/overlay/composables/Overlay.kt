@@ -290,21 +290,7 @@ fun Overlay(
                 .background(
                     color = BackgroundColorDefault,
                     shape = backgroundShape,
-                )
-                .pointerInput(Unit) {
-                    detectDragGestures(onDrag = { _, offset ->
-                        horizontalDragCallback(offset.x)
-
-                        verticalDragOffset += offset.y
-                        verticalDragOffset = verticalDragCallback(verticalDragOffset)
-                    }, onDragEnd = {
-                        verticalDragOffset = 0f
-                        onDragFinished()
-                    }, onDragCancel = {
-                        verticalDragOffset = 0f
-                        onDragFinished()
-                    })
-                }) {
+                )) {
 
 
                 val rowAlignment = when (location) {
@@ -378,9 +364,39 @@ fun Overlay(
     // in Constraints"). Cap the Snackbar to the screen width so it always has a bounded
     // width regardless of the unbounded parent.
     val maxSnackbarWidth = LocalConfiguration.current.screenWidthDp.dp
+    // One drag handler for the whole overlay, so a drag carries on when the bar turns into a
+    // column at a side edge (or back): the piece under the finger changes, the gesture doesn't.
+    val currentLocation by rememberUpdatedState(location)
+    var dragLocation by remember { mutableStateOf(location) }
+    val dragModifier = Modifier.pointerInput(Unit) {
+        detectDragGestures(onDrag = { change, offset ->
+            val now = currentLocation
+            if (now != dragLocation) {
+                // Changed shape mid-drag: start the top/bottom flip distance over.
+                dragLocation = now
+                verticalDragOffset = 0f
+            }
+            if (now.isSide) {
+                change.consume()
+                sideDragCallback(offset.x, offset.y)
+            } else {
+                horizontalDragCallback(offset.x)
+
+                verticalDragOffset += offset.y
+                verticalDragOffset = verticalDragCallback(verticalDragOffset)
+            }
+        }, onDragEnd = {
+            verticalDragOffset = 0f
+            onDragFinished()
+        }, onDragCancel = {
+            verticalDragOffset = 0f
+            onDragFinished()
+        })
+    }
     Box(
         modifier = Modifier
             .wrapContentSize(unbounded = true)
+            .then(if (errorMessage == null) dragModifier else Modifier)
     ) {
         errorMessage?.let {
             Snackbar(
@@ -432,8 +448,6 @@ fun Overlay(
                 onTimerLongPress = { timerViewModel.onTimerLongPress() },
                 onOpenSettings = { sensorViewModel.onOverlayDoubleTap() },
                 onMinimizeToggle = { sensorViewModel.onOverlayPressed() },
-                onDrag = sideDragCallback,
-                onDragFinished = onDragFinished,
                 onLayout = {
                     if (it != size.value) {
                         size.value = it

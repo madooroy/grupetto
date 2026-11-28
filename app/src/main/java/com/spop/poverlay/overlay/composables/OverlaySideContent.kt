@@ -3,7 +3,6 @@ package com.spop.poverlay.overlay.composables
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,6 +40,8 @@ import com.spop.poverlay.overlay.OverlayLocation
 import com.spop.poverlay.overlay.OverlayCornerRadius
 
 /**
+ * Dragging is handled by [Overlay] for the bar and the column together.
+ *
  * The overlay docked against the left or right edge: the same numbers as the bar, stacked.
  * The chart is left out (no room in a column). Same background and the same 50% fade when
  * minimized as the bar. Expanded shows units and calories; minimized shows numbers only.
@@ -77,8 +78,6 @@ fun OverlaySideContent(
     onTimerLongPress: () -> Unit,
     onOpenSettings: () -> Unit,
     onMinimizeToggle: () -> Unit,
-    onDrag: (Float, Float) -> Unit,
-    onDragFinished: () -> Unit,
     onLayout: (IntSize) -> Unit,
 ) {
     val onLeft = location != OverlayLocation.Right
@@ -94,16 +93,6 @@ fun OverlaySideContent(
             .alpha(contentAlpha)
             .onSizeChanged(onLayout)
             .background(BackgroundColorDefault, shape)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDrag = { change, offset ->
-                        change.consume()
-                        onDrag(offset.x, offset.y)
-                    },
-                    onDragEnd = onDragFinished,
-                    onDragCancel = onDragFinished,
-                )
-            }
             .padding(horizontal = 10.dp, vertical = 8.dp)
             .width(if (isMinimized) 76.dp else 96.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
