@@ -158,6 +158,19 @@ class OverlayPositionTest {
     }
 
     @Test
+    fun `a finger reaching the side of the screen docks the bar, wherever the bar is`() {
+        val dialog = dialog()
+        dialog.processHorizontalDrag(200f)          // the bar is still well inside its track
+        dialog.processFingerAtEdge(1700f)
+        assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
+        dialog.processFingerAtEdge(1890f)           // within 2% of the right edge
+        assertEquals(OverlayLocation.Right, dialog.dialogLocation.value)
+        val left = dialog()
+        left.processFingerAtEdge(20f)
+        assertEquals(OverlayLocation.Left, left.dialogLocation.value)
+    }
+
+    @Test
     fun `a bar as wide as the screen never docks`() {
         val dialog = dialog()
         dialog.onOverlayLayout(IntSize(1920, 110))
