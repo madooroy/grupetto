@@ -1,5 +1,6 @@
 package com.spop.poverlay.overlay.composables
 
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -132,15 +133,27 @@ fun OverlaySideContent(
         if (emulationLabel != null) Text("DEMO", color = Color(0xFFFFCC44), fontSize = 11.sp)
         // "Timer when minimized" off means off, as on the bar.
         if (!isMinimized || showTimerWhenMinimized) {
+            // Paused: the timer blinks, as on the bar.
+            val pausedBlink = if (timerPaused) {
+                androidx.compose.animation.core.rememberInfiniteTransition().animateFloat(
+                    initialValue = 1f,
+                    targetValue = 0.6f,
+                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                        animation = androidx.compose.animation.core.tween(500, easing = androidx.compose.animation.core.LinearEasing),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                    )
+                ).value
+            } else 1f
             SideField(
                 modifier = Modifier
+                    .alpha(pausedBlink)
                     .semantics { if (timerPaused) stateDescription = "Paused" }
                     .pointerInput(Unit) {
                         detectTapGestures(onTap = { onTimerTap() }, onLongPress = { onTimerLongPress() })
                     },
                 value = timerLabel,
                 unit = null,
-                iconDrawable = if (timerPaused) R.drawable.ic_timer_paused else R.drawable.ic_timer,
+                iconDrawable = R.drawable.ic_timer,
                 large = false,
             )
         }
