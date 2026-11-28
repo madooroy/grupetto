@@ -431,6 +431,8 @@ fun Overlay(
                 showCaloriesField = showCalories,
                 flywheelLabel = flywheelLabel,
                 emulationLabel = sensorViewModel.emulatedModel,
+                rampLabel = rampLabel,
+                onRampTap = { sensorViewModel.cycleRampRate() },
                 onTimerTap = { timerViewModel.onTimerTap() },
                 onTimerLongPress = { timerViewModel.onTimerLongPress() },
                 onOpenSettings = { sensorViewModel.onOverlayDoubleTap() },

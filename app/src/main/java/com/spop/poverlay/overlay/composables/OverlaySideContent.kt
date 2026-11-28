@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -73,6 +74,8 @@ fun OverlaySideContent(
     showCaloriesField: Boolean,
     flywheelLabel: kotlinx.coroutines.flow.Flow<String?>?,
     emulationLabel: String?,
+    rampLabel: String? = null,
+    onRampTap: () -> Unit = {},
     onTimerTap: () -> Unit,
     onTimerLongPress: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -156,6 +159,20 @@ fun OverlaySideContent(
             iconDrawable = R.drawable.ic_hrm, large = showUnits, textColor = heartRateColor)
         if (showCaloriesField && showUnits) SideField(value = caloriesLabel, unit = "kcal",
             iconDrawable = R.drawable.ic_calories, large = true)
+        if (rampLabel != null) {
+            // Tap to step the ERG ramp speed mid-ride, as on the bar.
+            val rampTap by androidx.compose.runtime.rememberUpdatedState(onRampTap)
+            Text(
+                rampLabel,
+                color = Color(0xFF6EE7B7),
+                fontSize = 13.sp,
+                maxLines = 1,
+                modifier = Modifier
+                    .background(Color(0x5552728F), RoundedCornerShape(6.dp))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { rampTap() }) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
         if (flywheelLabel != null) FlywheelChip(flywheelLabel, leadingSpace = false)
     }
 }
