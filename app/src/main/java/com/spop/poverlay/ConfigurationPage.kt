@@ -339,6 +339,8 @@ fun ConfigurationPage(viewModel: ConfigurationViewModel) {
         }
         "quit" -> AlertDialog(
             onDismissRequest = { dialog = null },
+            // A short question: without a width it stretched across the whole 24" screen.
+            modifier = Modifier.widthIn(max = 520.dp),
             title = { Text("Quit Grupetto?") },
             text = {
                 Text("The overlay closes, ERG stops, and " +
