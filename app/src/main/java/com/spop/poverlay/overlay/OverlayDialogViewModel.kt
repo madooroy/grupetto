@@ -30,6 +30,9 @@ class OverlayDialogViewModel(
         // Dragging a docked column this far away from its edge puts it back at the top or bottom.
         const val SideUndockDragFraction = .25f
 
+        // A finger dragging the bar this close to the left or right edge of the screen (a share of its width) docks it.
+        const val FingerEdgeFraction = .02f
+
         // Where a column first docks, below the screen's centre (a share of the screen height): between
         // Peloton's music card and high-five feed (upper left) and its target pills and metrics (bottom).
         const val DefaultSideOffsetFraction = .11f
@@ -129,6 +132,20 @@ class OverlayDialogViewModel(
             moveTo(bar)
             horizontalDragOffset = fromCentre.coerceIn(horizontalDragScreenRange)
             updateOrigin(dialogOrigin, x = horizontalDragOffset, y = 0f)
+        }
+    }
+
+    /**
+     * A bar being dragged with the finger at [fingerScreenX] (px from the screen's left): a finger at the very edge of
+     * the screen docks it there, wherever the bar has got to on its track (the bar follows the finger only partly
+     * while it slides, so on a drag across the screen it may not reach the end of its track before the finger does).
+     */
+    fun processFingerAtEdge(fingerScreenX: Float) {
+        if (dialogLocation.value.isSide || horizontalDragScreenRange.endInclusive <= 0f) return
+        val zone = screenSize.width * FingerEdgeFraction
+        when {
+            fingerScreenX <= zone -> moveTo(OverlayLocation.Left)
+            fingerScreenX >= screenSize.width - zone -> moveTo(OverlayLocation.Right)
         }
     }
 

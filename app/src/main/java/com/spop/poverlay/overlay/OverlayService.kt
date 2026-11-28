@@ -286,7 +286,8 @@ class OverlayService : LifecycleEnabledService() {
                             dialogViewModel.sideOffset.takeIf { dialogViewModel.dialogLocation.value.isSide }
                         )
                     },
-                    sideDragCallback = dialogViewModel::processSideDrag
+                    sideDragCallback = dialogViewModel::processSideDrag,
+                    fingerAtEdgeCallback = dialogViewModel::processFingerAtEdge
                 )
             }
             alpha = 1f
