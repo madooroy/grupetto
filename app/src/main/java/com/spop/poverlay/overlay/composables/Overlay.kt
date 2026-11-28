@@ -22,6 +22,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -376,9 +378,22 @@ fun Overlay(
     // column at a side edge (or back): the piece under the finger changes, the gesture doesn't.
     val currentLocation by rememberUpdatedState(location)
     var dragLocation by remember { mutableStateOf(location) }
+    // Finger moves are measured on the screen, not in the overlay's window: the window follows the finger (and jumps
+    // to a new edge on a shape change), so moves measured inside it came out short and the bar trailed the finger
+    // (tried on the Bike+: a drag across the screen ran out of screen before the bar reached the far edge).
+    val overlayView = LocalView.current
     val dragModifier = Modifier.pointerInput(Unit) {
         var settleUntil = 0L
-        detectDragGestures(onDrag = { change, offset ->
+        val windowAt = IntArray(2)
+        var lastOnScreen: Offset? = null
+        fun onScreen(local: Offset): Offset {
+            overlayView.getLocationOnScreen(windowAt)
+            return local + Offset(windowAt[0].toFloat(), windowAt[1].toFloat())
+        }
+        detectDragGestures(onDragStart = { lastOnScreen = onScreen(it) }, onDrag = { change, _ ->
+            val fingerOnScreen = onScreen(change.position)
+            val offset = fingerOnScreen - (lastOnScreen ?: fingerOnScreen)
+            lastOnScreen = fingerOnScreen
             val now = currentLocation
             if (now != dragLocation) {
                 // Changed shape mid-drag. The window jumps to its new edge while the finger stays put, so the next

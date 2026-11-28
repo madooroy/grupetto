@@ -144,14 +144,17 @@ class OverlayPositionTest {
     }
 
     @Test
-    fun `a drag heading for the other edge flips top and bottom and never docks`() {
-        val dialog = dialog(-460f)          // parked at the far left of the bottom edge
-        var progress = 0f
-        repeat(10) {                        // up and a little left, against the edge
-            dialog.processHorizontalDrag(-30f)
-            progress = dialog.processVerticalDrag(progress - 60f)
-        }
-        assertEquals(OverlayLocation.Top, dialog.dialogLocation.value)
+    fun `across in one drag - out of the left edge, along the bar, into the right edge, and it stays there`() {
+        val dialog = dialog(location = OverlayLocation.Left)
+        dialog.onOverlayLayout(IntSize(150, 400))
+        dialog.processSideDrag(500f, 0f)                    // out of the left edge
+        assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
+        dialog.onOverlayLayout(IntSize(1000, 110))          // the bar lays out
+        repeat(20) { dialog.processHorizontalDrag(60f) }    // across, and on into the right edge
+        assertEquals(OverlayLocation.Right, dialog.dialogLocation.value)
+        dialog.onOverlayLayout(IntSize(150, 400))
+        dialog.processSideDrag(-20f, 30f)                   // a small move: still docked
+        assertEquals(OverlayLocation.Right, dialog.dialogLocation.value)
     }
 
     @Test
