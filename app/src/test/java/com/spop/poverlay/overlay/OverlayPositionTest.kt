@@ -128,9 +128,9 @@ class OverlayPositionTest {
     fun `pushing the bar past a side edge docks it there as a column`() {
         val dialog = dialog()
         dialog.processHorizontalDrag(-460f) // at the left edge
-        dialog.processHorizontalDrag(-50f)  // pushed a little: still a bar
+        dialog.processHorizontalDrag(-100f) // a finger carrying on past the end: still a bar
         assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
-        dialog.processHorizontalDrag(-40f)  // past 4% of the screen width
+        dialog.processHorizontalDrag(-60f)  // past 8% of the screen width
         assertEquals(OverlayLocation.Left, dialog.dialogLocation.value)
         assertEquals(OverlayLocation.Left.gravity, dialog.dialogGravity.value)
         assertEquals(Offset.Zero, dialog.dialogOrigin.value)
@@ -139,9 +139,28 @@ class OverlayPositionTest {
     @Test
     fun `the first dock lands below the centre, clear of Peloton's feed`() {
         val dialog = dialog(side = null)
-        dialog.processHorizontalDrag(-600f)
+        dialog.processHorizontalDrag(-700f)
         assertEquals(OverlayLocation.Left, dialog.dialogLocation.value)
         assertEquals(Offset(0f, 1080f * OverlayDialogViewModel.DefaultSideOffsetFraction), dialog.dialogOrigin.value)
+    }
+
+    @Test
+    fun `a mostly vertical drag flips top and bottom and never docks`() {
+        val dialog = dialog(-460f)          // parked at the far left of the bottom edge
+        var progress = 0f
+        repeat(10) {                        // up and a little left, against the edge
+            dialog.processHorizontalDrag(-30f)
+            progress = dialog.processVerticalDrag(progress - 60f)
+        }
+        assertEquals(OverlayLocation.Top, dialog.dialogLocation.value)
+    }
+
+    @Test
+    fun `a bar as wide as the screen never docks`() {
+        val dialog = dialog()
+        dialog.onOverlayLayout(IntSize(1920, 110))
+        repeat(10) { dialog.processHorizontalDrag(-50f) }
+        assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
     }
 
     @Test
@@ -151,7 +170,7 @@ class OverlayPositionTest {
         dialog.processHorizontalDrag(60f)
         dialog.processHorizontalDrag(-10f) // back inside: the push starts over
         dialog.processHorizontalDrag(10f)
-        dialog.processHorizontalDrag(60f)
+        dialog.processHorizontalDrag(140f)
         assertEquals(OverlayLocation.Bottom, dialog.dialogLocation.value)
         dialog.processHorizontalDrag(30f)
         assertEquals(OverlayLocation.Right, dialog.dialogLocation.value)
